@@ -28,7 +28,7 @@ __status__ = "Development"
 def main():
     """Test Solver entry function"""
     opts = parse_arguments(itertools.islice(sys.argv, 1, None))
-    print(opts)
+    opts.func(opts)
 
 
 def run_gen(opts):
@@ -40,35 +40,52 @@ def run_test(opts):
     print("Test")
 
 
-def parse_arguments(args):  # TODO Fix this
-    """Parses the given arguments"""
+########################
+#   Argument Parsing   #
+########################
+
+def parse_arguments(args):
+    """Parses the given arguments.
+
+    It creates several subparsers, one for each possible command and sets
+    the 'func' attribute according to the selected command.
+    """
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description="---- DESCRIPTION HERE ----",
-        epilog="---- EPILOG HERE ----")
+        description="",
+        epilog="")
 
-    subparsers = parser.add_subparsers(help='sub-command --help')
+    parser.add_argument('--version', action='version',
+                    version="Version: {0}".format(__version__))
 
-    parser_gen = subparsers.add_parser('gen',
+    # **** Subparsers shared arguments ****
+    base_subparser = argparse.ArgumentParser(add_help=False)
+
+    base_subparser.add_argument('binary', type=str, action='store',
+                                help="Path to the solver executable file.")
+
+    base_subparser.add_argument('workdir', type=str, action='store',
+                                help="Directory that contains the instances "
+                                     " and result files.")
+
+    base_subparser.add_argument('-e', '--ext', type=str, action='store',
+                                default='cnf', help="Instance files extension.")
+
+    base_subparser.add_argument('-p', '--parser', choices=['minisat'],
+                                required=True, help="Solver results parser.")
+
+    # **** Subparsers (sub-commands) ****
+    subparsers = parser.add_subparsers(help='Possible options are:',
+                                       metavar='command')
+    subparsers.required = True
+
+    parser_gen = subparsers.add_parser('gen', parents=[base_subparser],
                                        help='Generates a results file.')
     parser_gen.set_defaults(func=run_gen)
 
-    parser_test = subparsers.add_parser('test',
-                                        help='Tests the results of the solver.')
+    parser_test = subparsers.add_parser('test', parents=[base_subparser],
+                                        help='Tests a solver.')
     parser_test.set_defaults(func=run_test)
-
-
-    parser.add_argument('binary', type=str, action='store',
-                        help="Path to the solver executable file.")
-    parser.add_argument('workdir', type=str, action='store',
-                        help="Directory that contains the instances/results.")
-    parser.add_argument('-e', '--ext', type=str, action='store', default='cnf',
-                        help="Instance files extension.")
-    parser.add_argument('-p', '--parser', choices=['minisat'], required=True,
-                        help="Solver results parser-")
-
-    parser.add_argument('--version', action='version',
-                        version="Version: {0}".format(__version__))
 
     return parser.parse_args(args)
 
