@@ -3,6 +3,7 @@
 
 import argparse
 import itertools
+import os.path
 import sys
 
 
@@ -28,12 +29,22 @@ __status__ = "Development"
 def main():
     """Test Solver entry function"""
     opts = parse_arguments(itertools.islice(sys.argv, 1, None))
+
+    if not os.path.isfile(opts.binary) or not os.access(opts.binary, os.X_OK):
+        print(opts.binary, "is not an executable file ... exiting")
+        sys.exit(1)
+
+    if not os.path.isdir(opts.workdir):
+        print(opts.workdir, "is not a directory ... exiting")
+        sys.exit(1)
+
     opts.func(opts)
 
 
 def run_gen(opts):
     """Runs the gen sub-command"""
     print("Gen")
+
 
 def run_test(opts):
     """Runs the test sub-command"""
