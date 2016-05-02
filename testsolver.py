@@ -3,8 +3,13 @@
 
 import argparse
 import itertools
+import os
 import os.path
+import subprocess as sp
 import sys
+
+import parsers
+import testdata
 
 
 ##############################
@@ -38,18 +43,43 @@ def main():
         print(opts.workdir, "is not a directory ... exiting")
         sys.exit(1)
 
-    opts.func(opts)
+    instances = get_instances(opts)
+    opts.func(opts, instances)
 
 
-def run_gen(opts):
+def run_gen(opts, instances):
     """Runs the gen sub-command"""
-    print("Gen")
+
+    results = {}
+    for inst, path in instances:
+        print("Generating:", inst)
+        p = sp.Popen([opts.binary, path],
+                     stdin=sp.DEVNULL, stdout=sp.PIPE, stderr=sp.PIPE,
+                     universal_newlines=True)  # Use text pipes
+
+        out, err = p.communicate()
+        p.wait()
+
+        parser = parsers.create(opts.parser)
+        parser.parse(out)
+        results[inst] = parser.get_result()
+
+    print(testdata.serialize_results(results, True))
 
 
-def run_test(opts):
+def run_test(opts, instances):
     """Runs the test sub-command"""
-    print("Test")
+    print("Running test ...")
+    print(instances)
 
+
+def get_instances(opts):
+    """Gather all the instances from the working directory."""
+    instances = []
+    for root, dirs, files in os.walk(opts.workdir):
+        instances.extend((f, os.path.join(root, f))
+                         for f in files if f.endswith(opts.ext))
+    return instances
 
 ########################
 #   Argument Parsing   #
@@ -82,7 +112,7 @@ def parse_arguments(args):
     base_subparser.add_argument('-e', '--ext', type=str, action='store',
                                 default='cnf', help="Instance files extension.")
 
-    base_subparser.add_argument('-p', '--parser', choices=['minisat'],
+    base_subparser.add_argument('-p', '--parser', choices=parsers.get_names(),
                                 required=True, help="Solver results parser.")
 
     # **** Subparsers (sub-commands) ****
