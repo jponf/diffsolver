@@ -36,6 +36,10 @@ _XML_SOLVER_RESULT_RESTARTS = 'restarts'
 _XML_SOLVER_RESULT_SOLUTION = 'solution'
 
 
+def deserialize_results(data):
+    raise NotImplementedError()
+
+
 def serialize_results(results, prettify=False):
     """Serializes the results into an XML formatted string.
 
@@ -46,7 +50,7 @@ def serialize_results(results, prettify=False):
     :return: An XML with the information of the provided results.
     """
     root = et.Element(_XML_SOLVER_RESULTS)
-    root.append(et.Comment("Generated for testsolver"))
+    root.append(et.Comment("# Results: " + str(len(results))))
 
     for inst, r in results.items():
         result = et.SubElement(root, _XML_SOLVER_RESULT)
@@ -69,20 +73,6 @@ def serialize_results(results, prettify=False):
     raw_str = et.tostring(root, 'utf-8')
     return raw_string if not prettify else \
            xml.dom.minidom.parseString(raw_str).toprettyxml(indent='    ')
-
-
-def save_results(path,  results):
-    """Saves the given results into the file specified by path.
-
-    This function uses serialize_results before writing to the file, thereby
-    the results must conform with the format expected by serialize_results.
-
-    :param path: Path to the output file.
-    :param results: A dictionary whose keys are instance paths and their
-                    values SolverResult instances.
-    """
-    with open(path, 'wt') as f:
-        print(serialize_results(results, True), file=f)
 
 
 ##################

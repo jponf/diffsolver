@@ -64,7 +64,12 @@ def run_gen(opts, instances):
         parser.parse(out)
         results[inst] = parser.get_result()
 
-    print(testdata.serialize_results(results, True))
+    serialized_result = testdata.serialize_results(results, prettify=True)
+    results_file = os.path.join(opts.workdir,
+                                os.path.basename(opts.binary) + ".results")
+
+    with open(results_file, 'wt') as f:
+        f.write(serialized_result)
 
 
 def run_test(opts, instances):
@@ -80,6 +85,7 @@ def get_instances(opts):
         instances.extend((f, os.path.join(root, f))
                          for f in files if f.endswith(opts.ext))
     return instances
+
 
 ########################
 #   Argument Parsing   #
@@ -111,6 +117,9 @@ def parse_arguments(args):
 
     base_subparser.add_argument('-e', '--ext', type=str, action='store',
                                 default='cnf', help="Instance files extension.")
+
+    base_subparser.add_argument('-d', '--debug', action='store_true',
+                                help="Enables debugging output")
 
     base_subparser.add_argument('-p', '--parser', choices=parsers.get_names(),
                                 required=True, help="Solver results parser.")
