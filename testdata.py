@@ -15,6 +15,14 @@ __copyright__ = "Copyright 2016, Josep Pon Farreny"
 __credits__ = ["Josep Pon Farreny"]
 
 
+################################
+#   Useful Exception Classes   #
+################################
+
+class SerializationError(Exception):
+    """Raised when (de)serializing incorrectly formatted data."""
+
+
 ####################
 #   SolverResult   #
 ####################
@@ -24,6 +32,7 @@ SolverResult = collections.namedtuple(
     ['conflicts', 'decisions', 'optimum',
      'propagations', 'restarts', 'solution']
 )
+
 
 _XML_INSTANCE_TAG = 'instance'
 _XML_CONFLICTS_TAG = 'conflicts'
@@ -44,11 +53,19 @@ def deserialize_results(serialized_str):
     :param data: An XML formatted string with the serialized results.
     :return:
     """
-    results = {}
-    root = et.fromstring(serialized_str)
+    try:
+        root = et.fromstring(serialized_str)
+    except et.ParseError as e:
+        raise SerializationError(str(e))
 
+    if root.tag != _XML_RESULTS_TAG:
+        raise SerializationError('Root tag must be %s' % _XML_RESULT_TAG)
+
+    results = collections.OrderedDict()
+    for r in root.findall(_XML_RESULT_TAG):
+        instance, result = _deserilize_result(r)
+        results[instance] = result
     return results
-
 
 
 def serialize_results(results, solver="", timestamp="", prettify=False):
@@ -83,4 +100,54 @@ def serialize_results(results, solver="", timestamp="", prettify=False):
            xml.dom.minidom.parseString(raw_str).toprettyxml(indent='    ')
 
 
-##################
+#######################
+#   Utility methods   #
+#######################
+
+def _deserilize_result(et_result):
+    def raise_serialization_error(tag):
+        raise SerializationError("There must be one and only one '%s' tag in "
+                                 "each '%s' tag." % (tag, _XML_RESULT_TAG))
+
+    instance = et_result.findall(_XML_INSTANCE_TAG)
+    conflicts = et_result.findall(_XML_CONFLICTS_TAG)
+    decisions = et_result.findall(_XML_DECISIONS_TAG)
+    optimum = et_result.findall(_XML_OPTIMUM_TAG)
+    propagations = et_result.findall(_XML_PROPAGATIONS_TAG)
+    restarts = et_result.findall(_XML_RESTARTS_TAG)
+    solution = et_result.findall(_XML_SOLUTION_TAG)
+
+    if len(instance) != 1:
+        raise_serialization_error(_XML_INSTANCE_TAG)
+    if len(conflicts) != 1:
+        raise_serialization_error(_XML_CONFLICTS_TAG)
+    if len(decisions) != 1:
+        raise_serialization_error(_XML_DECISIONS_TAG)
+    if len(optimum) != 1:
+        raise_serialization_error(_XML_OPTIMUM_TAG)
+    if len(propagations) != 1:
+        raise_serialization_error(_XML_PROPAGATIONS_TAG)
+    if len(restarts) != 1:
+        raise_serialization_error(_XML_RESTARTS_TAG)
+    if len(solution) != 1:
+        raise_serialization_error(_XML_SOLUTION_TAG)
+
+    try:
+        instance = instance[0].text.strip()
+        conflicts = int(conflicts[0].text.strip())
+        decisions = int(decisions[0].text.strip())
+        optimum = int(optimum[0].text.strip())
+        propagations = int(propagations[0].text.strip())
+        restarts = int(restarts[0].text.strip())
+        solution = solution[0].text.strip()
+
+        return instance, \
+               SolverResult(conflicts=conflicts, decisions=decisions,
+                            optimum=optimum, propagations=propagations,
+                            restarts=restarts, solution=solution)
+    except ValueError:
+        raise SerializationError("Tags '%s, %s, %s, %s and %s' must contain "
+                                 "an integer value." %
+                                 (_XML_CONFLICTS_TAG, _XML_DECISIONS_TAG,
+                                  _XML_OPTIMUM_TAG, _XML_PROPAGATIONS_TAG,
+                                  _XML_RESTARTS_TAG))

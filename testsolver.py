@@ -87,19 +87,26 @@ def run_gen(opts, instances):
 
 def run_test(opts, instances):
     """Runs the test sub-command"""
-    results = None
-    try:
-        f = open(opts.results, 'rt')
-        results = testdata.deserialize_results(f.read())
-        f.close()
-    except IOError as e:
-        print("Unable to read %s:" % opts.results, str(e))
-        sys.exit(_EXIT_RESULTS_ERR)
+    results = load_results_file_or_exit(opts)
 
     for k, v in results.items():
         print('-----')
         print(k)
         print(v)
+
+
+def load_results_file_or_exit(opts):
+    try:
+        f, path = open_results_file(opts)
+        print("Processing results file:", path)
+        with f:
+            return testdata.deserialize_results(f.read())
+    except (FileNotFoundError, IOError) as e:
+        print("Unable to read %s:" % opts.results, e)
+        sys.exit(_EXIT_RESULTS_ERR)
+    except testdata.SerializationError as e:
+        print("Error loading results file:", e)
+        sys.exit(_EXIT_RESULTS_ERR)
 
 
 def get_instances(opts):
@@ -109,6 +116,14 @@ def get_instances(opts):
         instances.extend((f, os.path.join(root, f))
                          for f in files if f.endswith(opts.ext))
     return instances
+
+
+def open_results_file(opts):
+    try:
+        return open(opts.results, "rt"), opts.results
+    except FileNotFoundError:
+        workdir_path = os.path.join(opts.workdir, opts.results)
+        return open(workdir_path, "rt"), workdir_path
 
 
 ########################
