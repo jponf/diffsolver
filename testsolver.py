@@ -64,7 +64,11 @@ def run_gen(opts, instances):
         parser.parse(out)
         results[inst] = parser.get_result()
 
-    serialized_result = testdata.serialize_results(results, prettify=True)
+    serialized_result = testdata.serialize_results(
+        results, solver=os.path.basename(opts.binary),
+        timestamp=str(datetime.datetime.now()),
+        prettify=True
+    )
     results_file = os.path.join(opts.workdir,
                                 os.path.basename(opts.binary) + ".results")
 

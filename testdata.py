@@ -25,22 +25,24 @@ SolverResult = collections.namedtuple(
      'propagations', 'restarts', 'solution']
 )
 
-_XML_SOLVER_RESULTS = 'sresults'
-_XML_SOLVER_RESULT = 'sresult'
-_XML_SOLVER_RESULT_INSTANCE = 'instance'
-_XML_SOLVER_RESULT_CONFLICTS = 'conflicts'
-_XML_SOLVER_RESULT_DECISIONS = 'decisions'
-_XML_SOLVER_RESULT_OPTIMUM = 'optimum'
-_XML_SOLVER_RESULT_PROPAGATIONS = 'propagations'
-_XML_SOLVER_RESULT_RESTARTS = 'restarts'
-_XML_SOLVER_RESULT_SOLUTION = 'solution'
+_XML_SOLVER_RESULTS_TAG = 'sresults'
+_XML_SOLVER_RESULT_TAG = 'sresult'
+_XML_INSTANCE_TAG = 'instance'
+_XML_CONFLICTS_TAG = 'conflicts'
+_XML_DECISIONS_TAG = 'decisions'
+_XML_OPTIMUM_TAG = 'optimum'
+_XML_PROPAGATIONS_TAG = 'propagations'
+_XML_RESTARTS_TAG = 'restarts'
+_XML_SOLUTION_TAG = 'solution'
+_XML_SOLVER_TAG = 'solver'
+_XML_TIMESTAMP_TAG = 'timestamp'
 
 
 def deserialize_results(data):
     raise NotImplementedError()
 
 
-def serialize_results(results, prettify=False):
+def serialize_results(results, solver="", timestamp="", prettify=False):
     """Serializes the results into an XML formatted string.
 
     :param results: A dictionary whose keys are instance paths and their
@@ -52,15 +54,20 @@ def serialize_results(results, prettify=False):
     root = et.Element(_XML_SOLVER_RESULTS)
     root.append(et.Comment("# Results: " + str(len(results))))
 
+    if solver:
+        et.SubElement(root, _XML_SOLVER_TAG).text = solver
+    if timestamp:
+        et.SubElement(root, _XML_TIMESTAMP_TAG).text = timestamp
+
     for inst, r in results.items():
-        result = et.SubElement(root, _XML_SOLVER_RESULT)
-        instance = et.SubElement(result, _XML_SOLVER_RESULT_INSTANCE)
-        conflicts = et.SubElement(result, _XML_SOLVER_RESULT_CONFLICTS)
-        decisions = et.SubElement(result, _XML_SOLVER_RESULT_DECISIONS)
-        optimum = et.SubElement(result, _XML_SOLVER_RESULT_OPTIMUM)
-        propagations = et.SubElement(result, _XML_SOLVER_RESULT_PROPAGATIONS)
-        restarts = et.SubElement(result, _XML_SOLVER_RESULT_RESTARTS)
-        solution = et.SubElement(result, _XML_SOLVER_RESULT_SOLUTION)
+        result = et.SubElement(root, _XML_SOLVER_RESULT_TAG)
+        instance = et.SubElement(result, _XML_INSTANCE_TAG)
+        conflicts = et.SubElement(result, _XML_CONFLICTS_TAG)
+        decisions = et.SubElement(result, _XML_DECISIONS_TAG)
+        optimum = et.SubElement(result, _XML_OPTIMUM_TAG)
+        propagations = et.SubElement(result, _XML_PROPAGATIONS_TAG)
+        restarts = et.SubElement(result, _XML_RESTARTS_TAG)
+        solution = et.SubElement(result, _XML_SOLUTION_TAG)
 
         instance.text = inst
         conflicts.text = str(r.conflicts)
