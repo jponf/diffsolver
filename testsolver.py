@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import collections
+import datetime
 import itertools
 import os
 import os.path
@@ -28,6 +30,15 @@ __status__ = "Development"
 
 
 ########################
+#   Module Constants   #
+########################
+
+_EXIT_BINARY_ERR = 1
+_EXIT_WORKDIR_ERR = 2
+_EXIT_RESULTS_ERR = 3
+
+
+########################
 #   Module Functions   #
 ########################
 
@@ -37,11 +48,11 @@ def main():
 
     if not os.path.isfile(opts.binary) or not os.access(opts.binary, os.X_OK):
         print(opts.binary, "is not an executable file ... exiting")
-        sys.exit(1)
+        sys.exit(_EXIT_BINARY_ERR)
 
     if not os.path.isdir(opts.workdir):
         print(opts.workdir, "is not a directory ... exiting")
-        sys.exit(1)
+        sys.exit(_EXIT_WORKDIR_ERR)
 
     instances = get_instances(opts)
     opts.func(opts, instances)
@@ -49,8 +60,7 @@ def main():
 
 def run_gen(opts, instances):
     """Runs the gen sub-command"""
-
-    results = {}
+    results = collections.OrderedDict()  # Preserve loop's order
     for inst, path in instances:
         print("Generating:", inst)
         p = sp.Popen([opts.binary, path],
@@ -64,22 +74,32 @@ def run_gen(opts, instances):
         parser.parse(out)
         results[inst] = parser.get_result()
 
-    serialized_result = testdata.serialize_results(
-        results, solver=os.path.basename(opts.binary),
-        timestamp=str(datetime.datetime.now()),
-        prettify=True
-    )
-    results_file = os.path.join(opts.workdir,
-                                os.path.basename(opts.binary) + ".results")
+    solver_name = os.path.basename(opts.binary)
+    timestamp = datetime.datetime.now()
 
+    serialized_result = testdata.serialize_results(
+        results, solver=solver_name, timestamp=str(timestamp), prettify=True)
+
+    results_file = os.path.join(opts.workdir, solver_name + ".results")
     with open(results_file, 'wt') as f:
         f.write(serialized_result)
 
 
 def run_test(opts, instances):
     """Runs the test sub-command"""
-    print("Running test ...")
-    print(instances)
+    results = None
+    try:
+        f = open(opts.results, 'rt')
+        results = testdata.deserialize_results(f.read())
+        f.close()
+    except IOError as e:
+        print("Unable to read %s:" % opts.results, str(e))
+        sys.exit(_EXIT_RESULTS_ERR)
+
+    for k, v in results.items():
+        print('-----')
+        print(k)
+        print(v)
 
 
 def get_instances(opts):
@@ -139,6 +159,8 @@ def parse_arguments(args):
 
     parser_test = subparsers.add_parser('test', parents=[base_subparser],
                                         help='Tests a solver.')
+    parser_test.add_argument('-r', '--results', type=str, action='store',
+                             required=True, help="Results to compare.")
     parser_test.set_defaults(func=run_test)
 
     return parser.parse_args(args)
