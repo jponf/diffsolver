@@ -71,8 +71,7 @@ def run_gen(opts, instances):
         p.wait()
 
         parser = parsers.create(opts.parser)
-        parser.parse(out)
-        results[inst] = parser.get_result()
+        results[inst] = parser.parse(out)
 
     solver_name = os.path.basename(opts.binary)
     timestamp = datetime.datetime.now()
@@ -89,16 +88,31 @@ def run_test(opts, instances):
     """Runs the test sub-command"""
     results = load_results_file_or_exit(opts)
 
-    for k, v in results.items():
-        print('-----')
-        print(k)
-        print(v)
+    for inst, path in instances:
+        if inst not in results:
+            print("Ignoring", inst, ". Not present in results")
+        else:
+            p = sp.Popen([opts.binary, path],
+                         stdin=sp.DEVNULL, stdout=sp.PIPE, stderr=sp.PIPE,
+                         universal_newlines=True)  # Use text pipes
+
+            out, err = p.communicate()
+            p.wait()
+
+            parser = parsers.create(opts.parser)
+            r = parser.parse(out)
+
+            if results[inst] == parser.get_result():
+                print(inst, "- EQUAL")
+            else:
+                print(inst, "- DIFFERENT")
 
 
 def load_results_file_or_exit(opts):
     try:
         f, path = open_results_file(opts)
         print("Processing results file:", path)
+        print("-" * (len(path) + 25))
         with f:
             return testdata.deserialize_results(f.read())
     except (FileNotFoundError, IOError) as e:

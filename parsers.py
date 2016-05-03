@@ -67,6 +67,10 @@ class AbstractSolverParser(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def parse(self, text):
+        """Parses the given solver output text.
+
+        :return: The parsed result.
+        """
         raise NotImplementedError("Abstract method.")
 
     def get_result(self):
@@ -138,6 +142,8 @@ class MiniSatParser(AbstractSolverParser):
             self._restarts = int(restarts_match.group(1))
         if solution_match:
             self._solution = solution_match.group(1)
+
+        return self.get_result()
 
 
 #
