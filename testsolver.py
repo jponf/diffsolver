@@ -87,28 +87,30 @@ def run_test(opts, instances):
     find_and_fix_results_path(opts)
     print_options_summary(opts)
 
+    num_different = 0
     results = load_results_file_or_exit(opts)
+
     for inst, path in instances:
         if inst not in results:
-            print("Ignoring", inst, ". Not present in results")
+            print("++ Ignoring", inst, ". Not present in results")
         else:
-            print("[RUNNING]", inst)
+            print("++ Executing", inst, end='', flush=True)
             status, out, err = execute_solver(opts.binary, path)
 
             parser = parsers.create(opts.parser)
-            r = parser.parse(out)
-            e = results[inst]
+            result = parser.parse(out)
+            expected = results[inst]
 
-            if results[inst] == parser.get_result():
-                print("-- EQUAL")
+            if expected == result:
+                print(" -- EQUAL")
             else:
-                print("-- DIFFERENT")
-                for attr in testdata.SolverResult._fields:
-                    ar, ae = getattr(r, attr), getattr(e, attr)
-                    if ar != ae:
-                        print('-', attr, 'E:', ae, 'R:', ar)
+                num_different += 1
+                print(" -- DIFFERENT")
+                if opts.diff:
+                    print_results_differences(expected, result)
 
-
+    print("")
+    print("***", num_different, "different results found. ***")
 
 #######################
 #   Utility methods   #
@@ -172,6 +174,8 @@ def print_options_summary(opts):
     print("= Solver Binary:", opts.binary)
     print("= Instances Ext:", opts.ext)
     print("= Result Parser:", opts.parser)
+    if hasattr(opts, 'diff'):
+        print("= Print Diffs:", opts.diff)
     if hasattr(opts, 'results'):
         print("= Results File:", opts.results)
     print("=================")
@@ -186,6 +190,16 @@ def execute_solver(binary, instance):
     out, err = p.communicate()
     status = p.wait()
     return status, out, err
+
+
+def print_results_differences(expected, result):
+    for attr in testdata.SolverResult._fields:
+        val_e = getattr(expected, attr)
+        val_r = getattr(result, attr)
+        if val_e != val_r:
+            print("**", attr)
+            print("   -- Exp:", val_e)
+            print("   -- Res:", val_r)
 
 
 ########################
@@ -236,6 +250,8 @@ def parse_arguments(args):
 
     parser_test = subparsers.add_parser('test', parents=[base_subparser],
                                         help='Tests a solver.')
+    parser_test.add_argument('-d', '--diff', action='store_true',
+                             help="Print all the differences found.")
     parser_test.add_argument('-r', '--results', type=str, action='store',
                              required=True, help="Results to compare.")
     parser_test.set_defaults(func=run_test)
