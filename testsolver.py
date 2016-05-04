@@ -66,7 +66,7 @@ def run_gen(opts, instances):
     results = collections.OrderedDict()  # Preserve loop's order
     for inst, path in instances:
         print("Generating:", inst)
-        out, err = execute_solver(opts.binary, path)
+        status, out, err = execute_solver(opts.binary, path)
 
         parser = parsers.create(opts.parser)
         results[inst] = parser.parse(out)
@@ -92,15 +92,22 @@ def run_test(opts, instances):
         if inst not in results:
             print("Ignoring", inst, ". Not present in results")
         else:
-            out, err = execute_solver(opts.binary, path)
+            print("[RUNNING]", inst)
+            status, out, err = execute_solver(opts.binary, path)
 
             parser = parsers.create(opts.parser)
             r = parser.parse(out)
+            e = results[inst]
 
             if results[inst] == parser.get_result():
-                print(inst, "- EQUAL")
+                print("-- EQUAL")
             else:
-                print(inst, "- DIFFERENT")
+                print("-- DIFFERENT")
+                for attr in testdata.SolverResult._fields:
+                    ar, ae = getattr(r, attr), getattr(e, attr)
+                    if ar != ae:
+                        print('-', attr, 'E:', ae, 'R:', ar)
+
 
 
 #######################
@@ -149,9 +156,9 @@ def find_and_fix_results_path(opts):
     if not os.path.isfile(opts.results):
         workdir_path = os.path.join(opts.workdir, opts.results)
         workdir_path_ext = workdir_path + ".results"
-        if os.path.is_file(workdir_path):
+        if os.path.isfile(workdir_path):
             opts.results = workdir_path
-        elif os.path.is_file(workdir_path_ext):
+        elif os.path.isfile(workdir_path_ext):
             opts.results = workdir_path_ext
 
 
@@ -172,17 +179,13 @@ def print_options_summary(opts):
 
 
 def execute_solver(binary, instance):
-    #progress_sequence = ['|', '/', '--', '\']
-    #progress_index = 0
-
     p = sp.Popen([binary, instance],
                  stdin=sp.DEVNULL, stdout=sp.PIPE, stderr=sp.PIPE,
                  universal_newlines=True)  # Use text pipes
 
-    #if sys.stdout.isatty():
     out, err = p.communicate()
-    p.wait()
-    return out, err
+    status = p.wait()
+    return status, out, err
 
 
 ########################
