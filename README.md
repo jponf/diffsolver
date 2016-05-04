@@ -1,8 +1,24 @@
 Test Solver
 ===========
 
-A simple and naive tool to test if the results of a solver have changed
+A simple and naive tool to test if the results of a solver have changed.
 
 ## Requirements ##
 
-No special requirements to run the testsolver code, setup.py on the other hand needs the setuptools package.
+No special requirements.
+
+## Zipapp ##
+
+To create a Zipapp, run the following command
+
+> python3 -m zipapp testsolver -m testsolver:main
+
+Additionally, if you want to make the generated file "executable" in POSIX environments, add the argument
+
+> -p "/path/to/python_interpreter"
+
+The complete command should look like this
+
+> python3 -m zipapp testsolver -m testsolver:main -p "/usr/bin/env python3"
+
+For more information, please see https://docs.python.org/3/library/zipapp.html

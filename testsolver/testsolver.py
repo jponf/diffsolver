@@ -10,14 +10,8 @@ import subprocess as sp
 import sys
 import time
 
-try:
-    # Module import
-    from . import parsers
-    from . import testdata
-except (SystemError, ImportError):
-    # Direct import
-    import parsers
-    import testdata
+import parsers
+import testdata
 
 
 ##############################

@@ -4,12 +4,7 @@
 import abc
 import re
 
-try:
-    # Module import
-    from . import testdata
-except (SystemError, ImportError):
-    # Direct impot
-    import testdata
+import testdata
 
 
 ##############################
