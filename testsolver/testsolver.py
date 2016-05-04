@@ -10,8 +10,14 @@ import subprocess as sp
 import sys
 import time
 
-import parsers
-import testdata
+try:
+    # Module import
+    from . import parsers
+    from . import testdata
+except (SystemError, ImportError):
+    # Direct import
+    import parsers
+    import testdata
 
 
 ##############################
@@ -23,7 +29,7 @@ __copyright__ = "Copyright 2016, Josep Pon Farreny"
 __credits__ = ["Josep Pon Farreny"]
 
 __license__ = "GPL"
-__version__ = "0.1a"
+__version__ = "0.1"
 __maintainer__ = "Josep Pon Farreny"
 __email__ = ""
 __status__ = "Development"
@@ -111,6 +117,7 @@ def run_test(opts, instances):
 
     print("")
     print("***", num_different, "different results found. ***")
+
 
 #######################
 #   Utility methods   #
