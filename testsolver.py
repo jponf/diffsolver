@@ -3,12 +3,12 @@
 
 import argparse
 import collections
-import datetime
 import itertools
 import os
 import os.path
 import subprocess as sp
 import sys
+import time
 
 import parsers
 import testdata
@@ -38,21 +38,22 @@ _EXIT_WORKDIR_ERR = 2
 _EXIT_RESULTS_ERR = 3
 
 
-########################
-#   Module Functions   #
-########################
+###############################################
+#   Test Solver Main and Commands Functions   #
+###############################################
 
 def main():
     """Test Solver entry function"""
     opts = parse_arguments(itertools.islice(sys.argv, 1, None))
 
-    if not os.path.isfile(opts.binary) or not os.access(opts.binary, os.X_OK):
-        print(opts.binary, "is not an executable file ... exiting")
-        sys.exit(_EXIT_BINARY_ERR)
-
     if not os.path.isdir(opts.workdir):
         print(opts.workdir, "is not a directory ... exiting")
         sys.exit(_EXIT_WORKDIR_ERR)
+
+    find_and_fix_binary_path(opts)
+    if not is_executable(opts.binary):
+        print(opts.binary, "is not an executable file ... exiting")
+        sys.exit(_EXIT_BINARY_ERR)
 
     instances = get_instances(opts)
     opts.func(opts, instances)
@@ -60,24 +61,21 @@ def main():
 
 def run_gen(opts, instances):
     """Runs the gen sub-command"""
+    print_options_summary(opts)
+
     results = collections.OrderedDict()  # Preserve loop's order
     for inst, path in instances:
         print("Generating:", inst)
-        p = sp.Popen([opts.binary, path],
-                     stdin=sp.DEVNULL, stdout=sp.PIPE, stderr=sp.PIPE,
-                     universal_newlines=True)  # Use text pipes
-
-        out, err = p.communicate()
-        p.wait()
+        out, err = execute_solver(opts.binary, path)
 
         parser = parsers.create(opts.parser)
         results[inst] = parser.parse(out)
 
     solver_name = os.path.basename(opts.binary)
-    timestamp = datetime.datetime.now()
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
 
     serialized_result = testdata.serialize_results(
-        results, solver=solver_name, timestamp=str(timestamp), prettify=True)
+        results, solver=solver_name, timestamp=timestamp, prettify=True)
 
     results_file = os.path.join(opts.workdir, solver_name + ".results")
     with open(results_file, 'wt') as f:
@@ -86,18 +84,15 @@ def run_gen(opts, instances):
 
 def run_test(opts, instances):
     """Runs the test sub-command"""
-    results = load_results_file_or_exit(opts)
+    find_and_fix_results_path(opts)
+    print_options_summary(opts)
 
+    results = load_results_file_or_exit(opts)
     for inst, path in instances:
         if inst not in results:
             print("Ignoring", inst, ". Not present in results")
         else:
-            p = sp.Popen([opts.binary, path],
-                         stdin=sp.DEVNULL, stdout=sp.PIPE, stderr=sp.PIPE,
-                         universal_newlines=True)  # Use text pipes
-
-            out, err = p.communicate()
-            p.wait()
+            out, err = execute_solver(opts.binary, path)
 
             parser = parsers.create(opts.parser)
             r = parser.parse(out)
@@ -108,20 +103,9 @@ def run_test(opts, instances):
                 print(inst, "- DIFFERENT")
 
 
-def load_results_file_or_exit(opts):
-    try:
-        f, path = open_results_file(opts)
-        print("Processing results file:", path)
-        print("-" * (len(path) + 25))
-        with f:
-            return testdata.deserialize_results(f.read())
-    except (FileNotFoundError, IOError) as e:
-        print("Unable to read %s:" % opts.results, e)
-        sys.exit(_EXIT_RESULTS_ERR)
-    except testdata.SerializationError as e:
-        print("Error loading results file:", e)
-        sys.exit(_EXIT_RESULTS_ERR)
-
+#######################
+#   Utility methods   #
+#######################
 
 def get_instances(opts):
     """Gather all the instances from the working directory."""
@@ -132,12 +116,73 @@ def get_instances(opts):
     return instances
 
 
-def open_results_file(opts):
+def load_results_file_or_exit(opts):
     try:
-        return open(opts.results, "rt"), opts.results
-    except FileNotFoundError:
+        with open(opts.results, "rt") as f:
+            return testdata.deserialize_results(f.read())
+    except (FileNotFoundError, IOError) as e:
+        print("Unable to read %s:" % opts.results, e)
+        sys.exit(_EXIT_RESULTS_ERR)
+    except testdata.SerializationError as e:
+        print("Error loading results file:", e)
+        sys.exit(_EXIT_RESULTS_ERR)
+
+
+def find_and_fix_binary_path(opts):
+    """Checks if the binary path is ok.
+
+    If the path does not point to a valid executable file it looks for it
+    in the user specified working directory.
+    """
+    if not is_executable(opts.binary):
+        workdir_path = os.path.join(opts.workdir, opts.binary)
+        if is_executable(workdir_path):
+            opts.binary = workdir_path
+
+
+def find_and_fix_results_path(opts):
+    """Checks if the results path is ok.
+
+    If the path does not point to a valid file it looks for it in the
+    user specified working directory.
+    """
+    if not os.path.isfile(opts.results):
         workdir_path = os.path.join(opts.workdir, opts.results)
-        return open(workdir_path, "rt"), workdir_path
+        workdir_path_ext = workdir_path + ".results"
+        if os.path.is_file(workdir_path):
+            opts.results = workdir_path
+        elif os.path.is_file(workdir_path_ext):
+            opts.results = workdir_path_ext
+
+
+def is_executable(path):
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def print_options_summary(opts):
+    print("==== OPTIONS ====")
+    print("= Work Directory:", opts.workdir)
+    print("= Solver Binary:", opts.binary)
+    print("= Instances Ext:", opts.ext)
+    print("= Result Parser:", opts.parser)
+    if hasattr(opts, 'results'):
+        print("= Results File:", opts.results)
+    print("=================")
+    print("")
+
+
+def execute_solver(binary, instance):
+    #progress_sequence = ['|', '/', '--', '\']
+    #progress_index = 0
+
+    p = sp.Popen([binary, instance],
+                 stdin=sp.DEVNULL, stdout=sp.PIPE, stderr=sp.PIPE,
+                 universal_newlines=True)  # Use text pipes
+
+    #if sys.stdout.isatty():
+    out, err = p.communicate()
+    p.wait()
+    return out, err
 
 
 ########################
@@ -161,18 +206,18 @@ def parse_arguments(args):
     # **** Subparsers shared arguments ****
     base_subparser = argparse.ArgumentParser(add_help=False)
 
-    base_subparser.add_argument('binary', type=str, action='store',
-                                help="Path to the solver executable file.")
-
     base_subparser.add_argument('workdir', type=str, action='store',
                                 help="Directory that contains the instances "
                                      " and result files.")
 
+    base_subparser.add_argument('binary', type=str, action='store',
+                                help="Path to the solver executable file.")
+
     base_subparser.add_argument('-e', '--ext', type=str, action='store',
                                 default='cnf', help="Instance files extension.")
 
-    base_subparser.add_argument('-d', '--debug', action='store_true',
-                                help="Enables debugging output")
+    #base_subparser.add_argument('-D', '--debug', action='store_true',
+    #                            help="Enables debugging output")
 
     base_subparser.add_argument('-p', '--parser', choices=parsers.get_names(),
                                 required=True, help="Solver results parser.")
