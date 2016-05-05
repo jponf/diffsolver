@@ -1,4 +1,4 @@
-Test Solver
+DiffSolver
 ===========
 
 A simple and naive tool to test if the results of a solver have changed.
