@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#
+# Add new parsers at the end of this file.
+#
 
+import abc
 import collections
+import re
 import xml.etree.ElementTree as et
 import xml.dom.minidom
 
@@ -15,9 +20,9 @@ __copyright__ = "Copyright 2016, Josep Pon Farreny"
 __credits__ = ["Josep Pon Farreny"]
 
 
-################################
-#   Useful Exception Classes   #
-################################
+#########################
+#   Exception Classes   #
+#########################
 
 class SerializationError(Exception):
     """Raised when (de)serializing incorrectly formatted data."""
@@ -32,6 +37,8 @@ SolverResult = collections.namedtuple(
     ['conflicts', 'decisions', 'optimum',
      'propagations', 'restarts', 'solution']
 )
+
+SolverResult.fields = SolverResult._fields
 
 
 _XML_INSTANCE_TAG = 'instance'
@@ -48,10 +55,10 @@ _XML_TIMESTAMP_TAG = 'timestamp'
 
 
 def deserialize_results(serialized_str):
-    """Deserializes the results from the given data.
+    """Deserializes the results from the given string.
 
     :param data: An XML formatted string with the serialized results.
-    :return:
+    :return: A dictionary with the mapping, instnce_name -> SolverResult.
     """
     try:
         root = et.fromstring(serialized_str)
@@ -100,10 +107,6 @@ def serialize_results(results, solver="", timestamp="", prettify=False):
            xml.dom.minidom.parseString(raw_str).toprettyxml(indent='    ')
 
 
-#######################
-#   Utility methods   #
-#######################
-
 def _deserilize_result(et_result):
     def raise_serialization_error(tag):
         raise SerializationError("There must be one and only one '%s' tag in "
@@ -151,3 +154,138 @@ def _deserilize_result(et_result):
                                  (_XML_CONFLICTS_TAG, _XML_DECISIONS_TAG,
                                   _XML_OPTIMUM_TAG, _XML_PROPAGATIONS_TAG,
                                   _XML_RESTARTS_TAG))
+
+
+#################################
+#   Parsers Factory Utilities   #
+#################################
+
+_parsers_registry = {}
+
+def create(name):
+    return _parsers_registry[name]()
+
+def get_names():
+    return list(_parsers_registry.keys())
+
+def register_parser(name, parser_cls):
+    _parsers_registry[name] = parser_cls
+
+
+#######################
+#   Abstract Parser   #
+#######################
+
+class AbstractSolverParser(metaclass=abc.ABCMeta):
+    """All subclasses must provide an empty or default initialized __init__
+    method.
+    """
+
+    @abc.abstractproperty
+    def conflicts(self):
+        raise NotImplementedError("Abstract property.")
+
+    @abc.abstractproperty
+    def decisions(self):
+        raise NotImplementedError("Abstract property.")
+
+    @abc.abstractproperty
+    def optimum(self):
+        raise NotImplementedError("Abstract property.")
+
+    @abc.abstractproperty
+    def propagations(self):
+        raise NotImplementedError("Abstract property.")
+
+    @abc.abstractproperty
+    def restarts(self):
+        raise NotImplementedError("Abstract property.")
+
+    @abc.abstractproperty
+    def solution(self):
+        raise NotImplementedError("Abstract property.")
+
+    @abc.abstractmethod
+    def parse(self, text):
+        """Parses the given solver output text.
+
+        :return: The parsed result.
+        """
+        raise NotImplementedError("Abstract method.")
+
+    def get_result(self):
+        return SolverResult(
+            conflicts=self.conflicts, decisions=self.decisions,
+            optimum=self.optimum, propagations=self.propagations,
+            restarts=self.restarts, solution=self.solution
+        )
+
+
+######################
+#   MiniSat Parser   #
+######################
+
+_MINISAT_CONF_RE = re.compile(r'conflicts\s*:\s*(\d+)[\s\S]*')
+_MINISAT_DECS_RE = re.compile(r'decisions\s*:\s*(\d+)[\s\S]*')
+_MINISAT_PROPS_RE = re.compile(r'propagations\s*:\s*(\d+)[\s\S]*')
+_MINISAT_RESTARTS_RE = re.compile(r'restarts\s*:\s*(\d+)[\s\S]*')
+_MINISAT_SOL_RE = re.compile(r'(INDETERMINATE|(?:UN)?SATISFIABLE)\s*')
+
+
+class MiniSatParser(AbstractSolverParser):
+
+    def __init__(self):
+        self._conflicts = -1
+        self._decisions = -1
+        self._propagations = -1
+        self._restarts = -1
+        self._solution = "INDETERMINATE"
+
+    @property
+    def conflicts(self):
+        return self._conflicts
+
+    @property
+    def decisions(self):
+        return self._decisions
+
+    @property
+    def optimum(self):
+        return -1
+
+    @property
+    def propagations(self):
+        return self._propagations
+
+    @property
+    def restarts(self):
+        return self._restarts
+
+    @property
+    def solution(self):
+        return self._solution
+
+    def parse(self, text):
+        conf_match = _MINISAT_CONF_RE.search(text)
+        decs_match = _MINISAT_DECS_RE.search(text)
+        props_match = _MINISAT_PROPS_RE.search(text)
+        restarts_match = _MINISAT_RESTARTS_RE.search(text)
+        solution_match = _MINISAT_SOL_RE.search(text)
+
+        if conf_match:
+            self._conflicts = int(conf_match.group(1))
+        if decs_match:
+            self._decisions = int(decs_match.group(1))
+        if props_match:
+            self._propagations = int(props_match.group(1))
+        if restarts_match:
+            self._restarts = int(restarts_match.group(1))
+        if solution_match:
+            self._solution = solution_match.group(1)
+
+        return self.get_result()
+
+
+#
+# Register MiniSat Parser Class
+register_parser('minisat', MiniSatParser)

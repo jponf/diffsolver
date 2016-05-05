@@ -11,7 +11,6 @@ import sys
 import time
 
 import parsers
-import testdata
 
 
 ##############################
@@ -23,7 +22,7 @@ __copyright__ = "Copyright 2016, Josep Pon Farreny"
 __credits__ = ["Josep Pon Farreny"]
 
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Josep Pon Farreny"
 __email__ = ""
 __status__ = "Development"
@@ -74,7 +73,7 @@ def run_gen(opts, instances):
     solver_name = os.path.basename(opts.binary)
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
 
-    serialized_result = testdata.serialize_results(
+    serialized_result = parsers.serialize_results(
         results, solver=solver_name, timestamp=timestamp, prettify=True)
 
     results_file = os.path.join(opts.workdir, solver_name + ".results")
@@ -82,7 +81,7 @@ def run_gen(opts, instances):
         f.write(serialized_result)
 
 
-def run_test(opts, instances):
+def run_diff(opts, instances):
     """Runs the test sub-command"""
     find_and_fix_results_path(opts)
     print_options_summary(opts)
@@ -106,7 +105,7 @@ def run_test(opts, instances):
             else:
                 num_different += 1
                 print(" -- DIFFERENT")
-                if opts.diff:
+                if opts.all:
                     print_results_differences(expected, result)
 
     print("")
@@ -129,11 +128,11 @@ def get_instances(opts):
 def load_results_file_or_exit(opts):
     try:
         with open(opts.results, "rt") as f:
-            return testdata.deserialize_results(f.read())
+            return parsers.deserialize_results(f.read())
     except (FileNotFoundError, IOError) as e:
         print("Unable to read %s:" % opts.results, e)
         sys.exit(_EXIT_RESULTS_ERR)
-    except testdata.SerializationError as e:
+    except parsers.SerializationError as e:
         print("Error loading results file:", e)
         sys.exit(_EXIT_RESULTS_ERR)
 
@@ -194,7 +193,7 @@ def execute_solver(binary, instance):
 
 
 def print_results_differences(expected, result):
-    for attr in testdata.SolverResult._fields:
+    for attr in parsers.SolverResult.fields:
         val_e = getattr(expected, attr)
         val_r = getattr(result, attr)
         if val_e != val_r:
@@ -249,13 +248,13 @@ def parse_arguments(args):
                                        help='Generates a results file.')
     parser_gen.set_defaults(func=run_gen)
 
-    parser_test = subparsers.add_parser('test', parents=[base_subparser],
+    parser_diff = subparsers.add_parser('diff', parents=[base_subparser],
                                         help='Tests a solver.')
-    parser_test.add_argument('-d', '--diff', action='store_true',
+    parser_diff.add_argument('-a', '--all', action='store_true',
                              help="Print all the differences found.")
-    parser_test.add_argument('-r', '--results', type=str, action='store',
+    parser_diff.add_argument('-r', '--results', type=str, action='store',
                              required=True, help="Results to compare.")
-    parser_test.set_defaults(func=run_test)
+    parser_diff.set_defaults(func=run_diff)
 
     return parser.parse_args(args)
 
