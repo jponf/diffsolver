@@ -38,7 +38,8 @@ echo "++ Using $py_version_all"
 # Generate zipapp
 ################################################################################
 
-[ "${py_version[$PYV_MAJOR]}" -gt 3 ] || [[ "${py_version[$PYV_MAJOR]}" -eq 3 && "${py_version[$PYV_MINOR]}" -ge 5 ]]
+[ "${py_version[$PYV_MAJOR]}" -gt 3 ] || \
+[[ "${py_version[$PYV_MAJOR]}" -eq 3 && "${py_version[$PYV_MINOR]}" -ge 5 ]]
 has_zipapp=$?
 
 if [ $has_zipapp == 0 ]; then  # It has zipapp
@@ -48,9 +49,16 @@ else
     # Add main function
     echo "-- Creating zipapp manually"
     echo "#/usr/bin/env $PYTHON" > $ZAPPNAME
-    for f in `find . -name "*.py"`; do
-        zip - $f >> $ZAPPNAME
-    done
+
+    echo "# -*- coding: utf-8 -*-"    > __main__.py
+    echo "if __name__ == '__main__':" >> __main__.py
+    echo "    import diffsolver"      >> __main__.py
+    echo "    diffsolver.main()"      >> __main__.py
+
+    zip -j -9 - `find . -name "*.py"` | cat >> $ZAPPNAME
+
+    rm __main__.py
+    chmod +x $ZAPPNAME
 fi
 
 echo ""
