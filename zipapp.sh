@@ -48,7 +48,7 @@ if [ $has_zipapp == 0 ]; then  # It has zipapp
 else
     # Add main function
     echo "-- Creating zipapp manually"
-    echo "#/usr/bin/env $PYTHON" > $ZAPPNAME
+    echo "#!/usr/bin/env $PYTHON" > $ZAPPNAME
 
     echo "# -*- coding: utf-8 -*-"    > __main__.py
     echo "if __name__ == '__main__':" >> __main__.py
