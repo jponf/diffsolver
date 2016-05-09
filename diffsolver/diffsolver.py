@@ -35,6 +35,7 @@ __status__ = "Development"
 _EXIT_BINARY_ERR = 1
 _EXIT_WORKDIR_ERR = 2
 _EXIT_RESULTS_ERR = 3
+_EXIT_RESULTS_INT = 4
 
 
 ###############################################
@@ -43,19 +44,23 @@ _EXIT_RESULTS_ERR = 3
 
 def main():
     """Test Solver entry function"""
-    opts = parse_arguments(itertools.islice(sys.argv, 1, None))
+    try:
+        opts = parse_arguments(itertools.islice(sys.argv, 1, None))
 
-    if not os.path.isdir(opts.workdir):
-        print(opts.workdir, "is not a directory ... exiting")
-        sys.exit(_EXIT_WORKDIR_ERR)
+        if not os.path.isdir(opts.workdir):
+            print(opts.workdir, "is not a directory ... exiting")
+            sys.exit(_EXIT_WORKDIR_ERR)
 
-    find_and_fix_binary_path(opts)
-    if not is_executable(opts.binary):
-        print(opts.binary, "is not an executable file ... exiting")
-        sys.exit(_EXIT_BINARY_ERR)
+        find_and_fix_binary_path(opts)
+        if not is_executable(opts.binary):
+            print(opts.binary, "is not an executable file ... exiting")
+            sys.exit(_EXIT_BINARY_ERR)
 
-    instances = get_instances(opts)
-    opts.func(opts, instances)
+        instances = get_instances(opts)
+        opts.func(opts, instances)
+    except KeyboardInterrupt:
+        print("Interrupted by user ... exiting")
+        sys.exit(_EXIT_RESULTS_INT)
 
 
 def run_gen(opts, instances):
