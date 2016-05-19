@@ -35,6 +35,16 @@ fi
 echo ""
 echo "++ Using $py_version_all"
 
+
+# Remove byte-compiled files
+################################################################################
+
+echo "-- Deleting byte-compiled files and __pycache__ directories"
+find . -name "*.pyc" -delete
+find . -name "*.pyo" -delete
+find . -name "__pycache__" -delete
+
+
 # Generate zipapp
 ################################################################################
 
