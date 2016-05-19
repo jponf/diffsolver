@@ -162,10 +162,10 @@ def _deserilize_result(et_result):
 
 _parsers_registry = {}
 
-def create(name):
+def create_parser(name):
     return _parsers_registry[name]()
 
-def get_names():
+def get_parsers_names():
     return list(_parsers_registry.keys())
 
 def register_parser(name, parser_cls):

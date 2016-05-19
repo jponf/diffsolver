@@ -10,7 +10,8 @@ import subprocess as sp
 import sys
 import time
 
-import parsers
+from parsers import create_parser, get_parsers_names, serialize_results, \
+                    deserialize_results, SolverResult
 
 
 ##############################
@@ -57,6 +58,7 @@ def main():
             sys.exit(_EXIT_BINARY_ERR)
 
         instances = get_instances(opts)
+        print(opts.show_fields)
         opts.func(opts, instances)
     except KeyboardInterrupt:
         print("Interrupted by user ... exiting")
@@ -72,13 +74,13 @@ def run_gen(opts, instances):
         print("Generating:", inst)
         status, out, err = execute_solver(opts.binary, path)
 
-        parser = parsers.create(opts.parser)
+        parser = parsers.create_parser(opts.parser)
         results[inst] = parser.parse(out)
 
     solver_name = os.path.basename(opts.binary)
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
 
-    serialized_result = parsers.serialize_results(
+    serialized_result = serialize_results(
         results, solver=solver_name, timestamp=timestamp, prettify=True)
 
     results_file = os.path.join(opts.workdir, solver_name + ".results")
@@ -101,18 +103,20 @@ def run_diff(opts, instances):
             print("++ Executing", inst, end='', flush=True)
             status, out, err = execute_solver(opts.binary, path)
 
-            parser = parsers.create(opts.parser)
+            parser = create_parser(opts.parser)
             result = parser.parse(out)
             expected = results[inst]
 
-            if expected == result:
-                print(" -- EQUAL")
-            else:
-                num_different += 1
+            differences = compute_results_differences(opts, expected, result)
+            if differences:
                 print(" -- DIFFERENT")
-                if opts.all:
-                    print_results_differences(expected, result)
-
+                num_different += 1
+                print_results_comparison(differences)
+            else:
+                print(" -- EQUAL")
+                print_results_comparison(
+                    (attr, getattr(expected, attr), getattr(result, attr))
+                    for attr in opts.show_fields)
     print("")
     print("***", num_different, "different results found. ***")
 
@@ -133,7 +137,7 @@ def get_instances(opts):
 def load_results_file_or_exit(opts):
     try:
         with open(opts.results, "rt") as f:
-            return parsers.deserialize_results(f.read())
+            return deserialize_results(f.read())
     except (FileNotFoundError, IOError) as e:
         print("Unable to read %s:" % opts.results, e)
         sys.exit(_EXIT_RESULTS_ERR)
@@ -179,8 +183,10 @@ def print_options_summary(opts):
     print("= Solver Binary:", opts.binary)
     print("= Instances Ext:", opts.ext)
     print("= Result Parser:", opts.parser)
-    if hasattr(opts, 'diff'):
-        print("= Print Diffs:", opts.diff)
+    if hasattr(opts, 'comp_fields'):
+        print("= Compare Fields:", opts.comp_fields)
+    if hasattr(opts, 'show_fields'):
+        print("= Show Fields:", opts.show_fields)
     if hasattr(opts, 'results'):
         print("= Results File:", opts.results)
     print("=================")
@@ -197,19 +203,44 @@ def execute_solver(binary, instance):
     return status, out, err
 
 
-def print_results_differences(expected, result):
-    for attr in parsers.SolverResult.fields:
+def compute_results_differences(opts, expected, result):
+    differences = []
+    for attr in opts.comp_fields:
         val_e = getattr(expected, attr)
         val_r = getattr(result, attr)
         if val_e != val_r:
-            print("**", attr)
-            print("   -- Exp:", val_e)
-            print("   -- Res:", val_r)
+            differences.append((attr, val_e, val_r))
+
+
+def print_results_comparison(attr_values):
+    for attr, val_e, val_r in attr_values:
+        print("**", attr)
+        print("   -- Exp:", val_e)
+        print("   -- Res:", val_r)
 
 
 ########################
 #   Argument Parsing   #
 ########################
+
+class MultipleChoicesAction(argparse.Action):
+
+    def __init__(self, option_strings, choices, **kwargs):
+        super().__init__(option_strings, choices=choices, **kwargs)
+        if not self.choices:
+            raise AttributeError("At least one choice is required")
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if values:
+            for value in values:
+                if value not in self.choices:
+                    choices_str = ", ".join((repr(a) for a in self.choices))
+                    message = "invalid choice: {0} (choose from {1})"\
+                              .format(value, choices_str)
+                    raise argparse.ArgumentError(self, message)
+
+            setattr(namespace, self.dest, values)
+
 
 def parse_arguments(args):
     """Parses the given arguments.
@@ -238,13 +269,10 @@ def parse_arguments(args):
     base_subparser.add_argument('-e', '--ext', type=str, action='store',
                                 default='cnf', help="Instance files extension.")
 
-    #base_subparser.add_argument('-D', '--debug', action='store_true',
-    #                            help="Enables debugging output")
-
-    base_subparser.add_argument('-p', '--parser', choices=parsers.get_names(),
+    base_subparser.add_argument('-p', '--parser', choices=get_parsers_names(),
                                 required=True, help="Solver results parser.")
 
-    # **** Subparsers (sub-commands) ****
+    # **** Subparser (sub-command) "GEN" ****
     subparsers = parser.add_subparsers(help='Possible options are:',
                                        metavar='command')
     subparsers.required = True
@@ -253,10 +281,27 @@ def parse_arguments(args):
                                        help='Generates a results file.')
     parser_gen.set_defaults(func=run_gen)
 
+    # **** Subparser (sub-command) "DIFF" ****
     parser_diff = subparsers.add_parser('diff', parents=[base_subparser],
                                         help='Tests a solver.')
-    parser_diff.add_argument('-a', '--all', action='store_true',
-                             help="Print all the differences found.")
+
+    parser_diff.add_argument('-cf', '--comp_fields', nargs='+',
+                             action=MultipleChoicesAction,
+                             choices=SolverResult.fields,
+                             default=SolverResult.fields,
+                             help="Result fields to compare. Valid Options "
+                                  "are: {%s}" % ", ".join(SolverResult.fields),
+                             metavar='fields')
+
+    parser_diff.add_argument('-sf', '--show_fields', nargs='*',
+                             action=MultipleChoicesAction,
+                             choices=SolverResult.fields,
+                             default=[],  # Otherwise it's None
+                             help="Solver result fields shown when the compared"
+                                  " fields are equal. Valid Options"
+                                  " are: {%s}" % ", ".join(SolverResult.fields),
+                             metavar='fields')
+
     parser_diff.add_argument('-r', '--results', type=str, action='store',
                              required=True, help="Results to compare.")
     parser_diff.set_defaults(func=run_diff)
