@@ -57,8 +57,7 @@ def main():
             print(opts.binary, "is not an executable file ... exiting")
             sys.exit(_EXIT_BINARY_ERR)
 
-        instances = [x for x in get_instances(opts) if "blocks-blocks-36-0.130-NOTKNOWN.cnf" == x[0]]
-
+        instances = get_instances(opts)
         opts.func(opts, instances)
     except KeyboardInterrupt:
         print("Interrupted by user ... exiting")
