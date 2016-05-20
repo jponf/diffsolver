@@ -69,8 +69,8 @@ def run_gen(opts, instances):
     print_options_summary(opts)
 
     results = collections.OrderedDict()  # Preserve loop's order
-    for inst, path in instances:
-        print("Generating:", inst)
+    for ind, (inst, path) in enumerate(instances, start=1):
+        print("++ ({0}/{1}) Generating:".format(ind, len(instances)), inst)
         status, out, err = execute_solver(opts.binary, path)
 
         parser = parsers.create_parser(opts.parser)
@@ -95,13 +95,15 @@ def run_diff(opts, instances):
     num_different = 0
     results = load_results_file_or_exit(opts)
 
-    for inst, path in instances:
+    for ind, (inst, path) in enumerate(instances, start=1):
         if inst not in results:
-            print("++ Ignoring", inst, ". Not present in results")
+            print("++ ({0}/{1}) Ignoring".format(ind, len(instances)),
+                  inst, ". Not present in results")
         else:
-            print("++ Executing", inst, end='', flush=True)
-            status, out, err = execute_solver(opts.binary, path)
+            print("++ ({0}/{1}) Executing".format(ind, len(instances)), inst,
+                  end='', flush=True)
 
+            status, out, err = execute_solver(opts.binary, path)
             parser = create_parser(opts.parser)
             result = parser.parse(out)
             expected = results[inst]
