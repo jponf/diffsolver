@@ -57,8 +57,8 @@ def main():
             print(opts.binary, "is not an executable file ... exiting")
             sys.exit(_EXIT_BINARY_ERR)
 
-        instances = get_instances(opts)
-        print(opts.show_fields)
+        instances = [x for x in get_instances(opts) if "blocks-blocks-36-0.130-NOTKNOWN.cnf" == x[0]]
+
         opts.func(opts, instances)
     except KeyboardInterrupt:
         print("Interrupted by user ... exiting")
@@ -117,6 +117,7 @@ def run_diff(opts, instances):
                 print_results_comparison(
                     (attr, getattr(expected, attr), getattr(result, attr))
                     for attr in opts.show_fields)
+
     print("")
     print("***", num_different, "different results found. ***")
 
@@ -210,6 +211,8 @@ def compute_results_differences(opts, expected, result):
         val_r = getattr(result, attr)
         if val_e != val_r:
             differences.append((attr, val_e, val_r))
+
+    return differences
 
 
 def print_results_comparison(attr_values):

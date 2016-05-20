@@ -239,7 +239,7 @@ class MiniSatParser(AbstractSolverParser):
         self._decisions = -1
         self._propagations = -1
         self._restarts = -1
-        self._solution = "INDETERMINATE"
+        self._solution = ""
 
     @property
     def conflicts(self):
