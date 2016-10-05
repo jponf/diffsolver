@@ -2,16 +2,16 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-import collections
 import itertools
 import os
 import os.path
-import subprocess as sp
 import sys
+import threading
 import time
 
 from parsers import create_parser, get_parsers_names, serialize_results, \
-                    deserialize_results, SolverResult
+                    deserialize_results, SerializationError, SolverResult
+from runner import BrokenPoolException, Runner, wait_futures
 
 
 ##############################
@@ -57,28 +57,33 @@ def main():
             print(opts.binary, "is not an executable file ... exiting")
             sys.exit(_EXIT_BINARY_ERR)
 
-        instances = get_instances(opts)
-        opts.func(opts, instances)
+        opts.func(opts)
     except KeyboardInterrupt:
         print("Interrupted by user ... exiting")
         sys.exit(_EXIT_RESULTS_INT)
 
 
-def run_gen(opts, instances):
+# Gen sub-command
+##############################################################################
+
+def run_gen(opts):
     """Runs the gen sub-command"""
     print_options_summary(opts)
 
-    results = collections.OrderedDict()  # Preserve loop's order
-    for ind, (inst, path) in enumerate(instances, start=1):
-        print("++ ({0}/{1}) Generating:".format(ind, len(instances)), inst)
-        status, out, err = execute_solver(opts.binary, path)
+    results = {}
+    runner = Runner(opts.num_jobs)
+    instances = get_instances(opts.workdir, opts.extension)
 
-        parser = parsers.create_parser(opts.parser)
-        results[inst] = parser.parse(out)
+    print("Setting runner task 'has finished' callback")
+    runner.add_done_callback(
+        generate_execution_finished_callback(results, opts.parser))
+
+    print("Enqueuing  and waiting {0} evaluations".format(len(instances)))
+    futures = [runner.run(opts.binary, path) for _, path in instances]
+    wait_futures(futures)
 
     solver_name = os.path.basename(opts.binary)
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
-
     serialized_result = serialize_results(
         results, solver=solver_name, timestamp=timestamp, prettify=True)
 
@@ -86,6 +91,28 @@ def run_gen(opts, instances):
     with open(results_file, 'wt') as f:
         f.write(serialized_result)
 
+
+def generate_execution_finished_callback(results, parser_name):
+    lock = threading.Lock()
+
+    def execution_finished_callback(future):
+        try:  # TODO properly check future finalization state
+            result = future.result()  # concurrent.futures.Future
+            parser = create_parser(parser_name)
+            with lock:
+                print("Finished evaluation {0}:".format(future.id),
+                      result.instance)
+                results[result.instance] = parser.parse(result.stdout)
+        except (KeyboardInterrupt, BrokenPoolException) as e:
+            print("Execution aborted:", e)
+
+    return execution_finished_callback
+
+
+# Diff sub-command
+##############################################################################
+
+# TODO REWRITE
 
 def run_diff(opts, instances):
     """Runs the test sub-command"""
@@ -127,12 +154,14 @@ def run_diff(opts, instances):
 #   Utility methods   #
 #######################
 
-def get_instances(opts):
+def get_instances(directory, extension):
     """Gather all the instances from the working directory."""
     instances = []
-    for root, dirs, files in os.walk(opts.workdir):
+    dot_ext = "." + extension
+
+    for root, dirs, files in os.walk(directory):
         instances.extend((f, os.path.join(root, f))
-                         for f in files if f.endswith(opts.ext))
+                         for f in files if f.endswith(dot_ext))
     return instances
 
 
@@ -143,7 +172,7 @@ def load_results_file_or_exit(opts):
     except (FileNotFoundError, IOError) as e:
         print("Unable to read %s:" % opts.results, e)
         sys.exit(_EXIT_RESULTS_ERR)
-    except parsers.SerializationError as e:
+    except SerializationError as e:
         print("Error loading results file:", e)
         sys.exit(_EXIT_RESULTS_ERR)
 
@@ -180,11 +209,13 @@ def is_executable(path):
 
 
 def print_options_summary(opts):
+    fmt_str = "- {0:>19}:"
+
     print("==== OPTIONS ====")
-    print("= Work Directory:", opts.workdir)
-    print("= Solver Binary:", opts.binary)
-    print("= Instances Ext:", opts.ext)
-    print("= Result Parser:", opts.parser)
+    print(fmt_str.format("Working Directory"), opts.workdir)
+    print(fmt_str.format("Solver Binary"), opts.binary)
+    print(fmt_str.format("Instances Extension"), opts.extension)
+    print(fmt_str.format("Result Parser"), opts.parser)
     if hasattr(opts, 'comp_fields'):
         print("= Compare Fields:", opts.comp_fields)
     if hasattr(opts, 'show_fields'):
@@ -193,16 +224,6 @@ def print_options_summary(opts):
         print("= Results File:", opts.results)
     print("=================")
     print("")
-
-
-def execute_solver(binary, instance):
-    p = sp.Popen([binary, instance],
-                 stdin=sp.DEVNULL, stdout=sp.PIPE, stderr=sp.PIPE,
-                 universal_newlines=True)  # Use text pipes
-
-    out, err = p.communicate()
-    status = p.wait()
-    return status, out, err
 
 
 def compute_results_differences(opts, expected, result):
@@ -260,34 +281,46 @@ def parse_arguments(args):
     parser.add_argument('--version', action='version',
                     version="Version: {0}".format(__version__))
 
+    subparsers = parser.add_subparsers(help='Possible options are:',
+                                       dest='command')
+    subparsers.required = True
+
     # **** Subparsers shared arguments ****
     base_subparser = argparse.ArgumentParser(add_help=False)
 
-    base_subparser.add_argument('workdir', type=str, action='store',
+    base_subparser.add_argument('-w', '--workdir', type=str,
+                                default=os.getcwd(),
                                 help="Directory that contains the instances "
                                      " and result files.")
 
-    base_subparser.add_argument('binary', type=str, action='store',
-                                help="Path to the solver executable file.")
-
-    base_subparser.add_argument('-e', '--ext', type=str, action='store',
-                                default='cnf', help="Instance files extension.")
-
-    base_subparser.add_argument('-p', '--parser', choices=get_parsers_names(),
-                                required=True, help="Solver results parser.")
-
     # **** Subparser (sub-command) "GEN" ****
-    subparsers = parser.add_subparsers(help='Possible options are:',
-                                       metavar='command')
-    subparsers.required = True
-
     parser_gen = subparsers.add_parser('gen', parents=[base_subparser],
                                        help='Generates a results file.')
+    parser_gen.add_argument('binary', type=str, action='store',
+                            help="Path to the solver executable file.")
+
+    parser_gen.add_argument('-p', '--parser', required=True,
+                            choices=get_parsers_names(),
+                            help="Solver results parser.")
+
+    parser_gen.add_argument('-e', '--extension', type=str, action='store',
+                            default='cnf', help="Instance files extension.")
+
+    parser_gen.add_argument('-j', '--num_jobs', type=int,
+                            default=1, help="Number of parallel executions.")
+
+
     parser_gen.set_defaults(func=run_gen)
 
     # **** Subparser (sub-command) "DIFF" ****
     parser_diff = subparsers.add_parser('diff', parents=[base_subparser],
                                         help='Tests a solver.')
+
+    parser_diff.add_argument('xml1', action='store',
+                             help="First XML to compare.")
+
+    parser_diff.add_argument('xml2', action='store',
+                             help="Second XML to compare.")
 
     parser_diff.add_argument('-cf', '--comp_fields', nargs='+',
                              action=MultipleChoicesAction,
@@ -306,8 +339,6 @@ def parse_arguments(args):
                                   " are: {%s}" % ", ".join(SolverResult.fields),
                              metavar='fields')
 
-    parser_diff.add_argument('-r', '--results', type=str, action='store',
-                             required=True, help="Results to compare.")
     parser_diff.set_defaults(func=run_diff)
 
     return parser.parse_args(args)

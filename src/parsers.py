@@ -103,7 +103,7 @@ def serialize_results(results, solver="", timestamp="", prettify=False):
         et.SubElement(result, _XML_SOLUTION_TAG).text = str(r.solution)
 
     raw_str = et.tostring(root, 'utf-8')
-    return raw_string if not prettify else \
+    return raw_str if not prettify else \
            xml.dom.minidom.parseString(raw_str).toprettyxml(indent='    ')
 
 
@@ -162,11 +162,14 @@ def _deserilize_result(et_result):
 
 _parsers_registry = {}
 
+
 def create_parser(name):
     return _parsers_registry[name]()
 
+
 def get_parsers_names():
     return list(_parsers_registry.keys())
+
 
 def register_parser(name, parser_cls):
     _parsers_registry[name] = parser_cls
