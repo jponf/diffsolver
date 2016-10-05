@@ -54,7 +54,8 @@ has_zipapp=$?
 
 if [ $has_zipapp == 0 ]; then  # It has zipapp
     echo "-- Using zipapp module"
-    $PYTHON -m zipapp diffsolver -m diffsolver:main -p "/usr/bin/env $PYTHON"
+    $PYTHON -m zipapp src -m diffsolver:main -o $ZAPPNAME \
+            -p "/usr/bin/env $PYTHON"
 else
     # Add main function
     echo "-- Creating zipapp manually"

@@ -59,8 +59,12 @@ docs/_build/
 # PyBuilder
 target/
 
-#Ipython Notebook
+# Ipython Notebook
 .ipynb_checkpoints
 
 # OSX Files
 .DS_[Ss]tore
+
+# IntelliJ
+.idea/*
+*.iml
