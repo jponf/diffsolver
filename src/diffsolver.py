@@ -52,11 +52,6 @@ def main():
             print(opts.workdir, "is not a directory ... exiting")
             sys.exit(_EXIT_WORKDIR_ERR)
 
-        find_and_fix_binary_path(opts)
-        if not is_executable(opts.binary):
-            print(opts.binary, "is not an executable file ... exiting")
-            sys.exit(_EXIT_BINARY_ERR)
-
         opts.func(opts)
     except KeyboardInterrupt:
         print("Interrupted by user ... exiting")
@@ -70,19 +65,15 @@ def run_gen(opts):
     """Runs the gen sub-command"""
     print_options_summary(opts)
 
-    results = {}
-    runner = Runner(opts.num_jobs)
+    if not is_executable(opts.solver):
+        print(opts.binary, "is not an executable file ... exiting")
+        sys.exit(_EXIT_BINARY_ERR)
+
     instances = get_instances(opts.workdir, opts.extension)
+    results = evaluate_all_instances(opts.solver, instances, opts.parser,
+                                     opts.num_jobs, opts.timeout)
 
-    print("Setting runner task 'has finished' callback")
-    runner.add_done_callback(
-        generate_execution_finished_callback(results, opts.parser))
-
-    print("Enqueuing  and waiting {0} evaluations".format(len(instances)))
-    futures = [runner.run(opts.binary, path) for _, path in instances]
-    wait_futures(futures)
-
-    solver_name = os.path.basename(opts.binary)
+    solver_name = os.path.basename(opts.solver)
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
     serialized_result = serialize_results(
         results, solver=solver_name, timestamp=timestamp, prettify=True)
@@ -90,6 +81,21 @@ def run_gen(opts):
     results_file = os.path.join(opts.workdir, solver_name + ".results")
     with open(results_file, 'wt') as f:
         f.write(serialized_result)
+
+
+def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
+    results = {}
+    runner = Runner(num_jobs, timeout)
+
+    print("Setting runner task 'has finished' callback")
+    runner.add_done_callback(
+        generate_execution_finished_callback(results, parser))
+
+    print("Enqueuing  and waiting {0} evaluations".format(len(instances)))
+    futures = [runner.run(solver, path) for _, path in instances]
+    wait_futures(futures)
+
+    return results
 
 
 def generate_execution_finished_callback(results, parser_name):
@@ -100,9 +106,12 @@ def generate_execution_finished_callback(results, parser_name):
             result = future.result()  # concurrent.futures.Future
             parser = create_parser(parser_name)
             with lock:
-                print("Finished evaluation {0}:".format(future.id),
-                      result.instance)
-                results[result.instance] = parser.parse(result.stdout)
+                if result.timeout:
+                    print("Timeout {0}:".format(future.id), result.instance)
+                else:
+                    print("Success {0}:".format(future.id), result.instance)
+                    results[result.instance] = parser.parse(result.stdout)
+
         except (KeyboardInterrupt, BrokenPoolException) as e:
             print("Execution aborted:", e)
 
@@ -114,37 +123,41 @@ def generate_execution_finished_callback(results, parser_name):
 
 # TODO REWRITE
 
-def run_diff(opts, instances):
+def run_diff(opts):
     """Runs the test sub-command"""
     find_and_fix_results_path(opts)
     print_options_summary(opts)
 
     num_different = 0
-    results = load_results_file_or_exit(opts)
+    results1 = load_results_file_or_exit(opts.results1)
+    results2 = load_results_file_or_exit(opts.results2)
 
-    for ind, (inst, path) in enumerate(instances, start=1):
-        if inst not in results:
-            print("++ ({0}/{1}) Ignoring".format(ind, len(instances)),
-                  inst, ". Not present in results")
-        else:
-            print("++ ({0}/{1}) Executing".format(ind, len(instances)), inst,
-                  end='', flush=True)
+    print(results1)
+    print(results2)
 
-            status, out, err = execute_solver(opts.binary, path)
-            parser = create_parser(opts.parser)
-            result = parser.parse(out)
-            expected = results[inst]
-
-            differences = compute_results_differences(opts, expected, result)
-            if differences:
-                print(" -- DIFFERENT")
-                num_different += 1
-                print_results_comparison(differences)
-            else:
-                print(" -- EQUAL")
-                print_results_comparison(
-                    (attr, getattr(expected, attr), getattr(result, attr))
-                    for attr in opts.show_fields)
+    # for ind, (inst, path) in enumerate(instances, start=1):
+    #     if inst not in results:
+    #         print("++ ({0}/{1}) Ignoring".format(ind, len(instances)),
+    #               inst, ". Not present in results")
+    #     else:
+    #         print("++ ({0}/{1}) Executing".format(ind, len(instances)), inst,
+    #               end='', flush=True)
+    #
+    #         status, out, err = execute_solver(opts.binary, path)
+    #         parser = create_parser(opts.parser)
+    #         result = parser.parse(out)
+    #         expected = results[inst]
+    #
+    #         differences = compute_results_differences(opts, expected, result)
+    #         if differences:
+    #             print(" -- DIFFERENT")
+    #             num_different += 1
+    #             print_results_comparison(differences)
+    #         else:
+    #             print(" -- EQUAL")
+    #             print_results_comparison(
+    #                 (attr, getattr(expected, attr), getattr(result, attr))
+    #                 for attr in opts.show_fields)
 
     print("")
     print("***", num_different, "different results found. ***")
@@ -165,28 +178,18 @@ def get_instances(directory, extension):
     return instances
 
 
-def load_results_file_or_exit(opts):
+def load_results_file_or_exit(file_path):
     try:
-        with open(opts.results, "rt") as f:
+        with open(file_path, "rt") as f:
             return deserialize_results(f.read())
-    except (FileNotFoundError, IOError) as e:
-        print("Unable to read %s:" % opts.results, e)
+    except FileNotFoundError as e:
+        print("File not found: %s" % file_path)
         sys.exit(_EXIT_RESULTS_ERR)
+    except IOError as e:
+        print("Error reading %s:" % file_path, e)
     except SerializationError as e:
-        print("Error loading results file:", e)
+        print("Error loading %s:" % file_path, e)
         sys.exit(_EXIT_RESULTS_ERR)
-
-
-def find_and_fix_binary_path(opts):
-    """Checks if the binary path is ok.
-
-    If the path does not point to a valid executable file it looks for it
-    in the user specified working directory.
-    """
-    if not is_executable(opts.binary):
-        workdir_path = os.path.join(opts.workdir, opts.binary)
-        if is_executable(workdir_path):
-            opts.binary = workdir_path
 
 
 def find_and_fix_results_path(opts):
@@ -213,7 +216,7 @@ def print_options_summary(opts):
 
     print("==== OPTIONS ====")
     print(fmt_str.format("Working Directory"), opts.workdir)
-    print(fmt_str.format("Solver Binary"), opts.binary)
+    print(fmt_str.format("Solver"), opts.solver)
     print(fmt_str.format("Instances Extension"), opts.extension)
     print(fmt_str.format("Result Parser"), opts.parser)
     if hasattr(opts, 'comp_fields'):
@@ -296,18 +299,21 @@ def parse_arguments(args):
     # **** Subparser (sub-command) "GEN" ****
     parser_gen = subparsers.add_parser('gen', parents=[base_subparser],
                                        help='Generates a results file.')
-    parser_gen.add_argument('binary', type=str, action='store',
+    parser_gen.add_argument('solver', type=str, action='store',
                             help="Path to the solver executable file.")
-
-    parser_gen.add_argument('-p', '--parser', required=True,
-                            choices=get_parsers_names(),
-                            help="Solver results parser.")
 
     parser_gen.add_argument('-e', '--extension', type=str, action='store',
                             default='cnf', help="Instance files extension.")
 
     parser_gen.add_argument('-j', '--num_jobs', type=int,
                             default=1, help="Number of parallel executions.")
+
+    parser_gen.add_argument('-p', '--parser', required=True,
+                            choices=get_parsers_names(),
+                            help="Solver results parser.")
+
+    parser_gen.add_argument('-t', '--timeout', type=int, default=30,
+                            help="Evaluations timeout in seconds.")
 
 
     parser_gen.set_defaults(func=run_gen)
@@ -316,11 +322,11 @@ def parse_arguments(args):
     parser_diff = subparsers.add_parser('diff', parents=[base_subparser],
                                         help='Tests a solver.')
 
-    parser_diff.add_argument('xml1', action='store',
-                             help="First XML to compare.")
+    parser_diff.add_argument('results1', action='store',
+                             help="First results to compare.")
 
-    parser_diff.add_argument('xml2', action='store',
-                             help="Second XML to compare.")
+    parser_diff.add_argument('results2', action='store',
+                             help="Second results to compare.")
 
     parser_diff.add_argument('-cf', '--comp_fields', nargs='+',
                              action=MultipleChoicesAction,

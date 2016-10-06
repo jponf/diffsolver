@@ -3,7 +3,7 @@
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, wait
 from concurrent.futures.process import BrokenProcessPool
-from subprocess import Popen, DEVNULL, PIPE
+from subprocess import Popen, TimeoutExpired, DEVNULL, PIPE
 
 
 # Rename the appropriate classes and functions
@@ -18,23 +18,24 @@ wait_futures = wait
 
 RunnerResult = namedtuple(
     'RunnerResult',
-    ['instance', 'exit_status', 'stdout', 'stderr']
+    ['instance', 'exit_status', 'stdout', 'stderr', 'timeout']
 )
 
 
 # Runner class to ease the execution of multiple (solver, instance) pairs
 ##############################################################################
 
-
 class Runner:
 
-    def __init__(self, n_jobs):
+    def __init__(self, n_jobs, timeout):
         self._executor = ProcessPoolExecutor(max_workers=n_jobs)
+        self._timeout = timeout
         self._done_callbacks = []
         self._id = 0
 
     def run(self, solver, instance):
-        f = self._executor.submit(_execute_solver, solver, instance)
+        f = self._executor.submit(_execute_solver, solver, instance,
+                                  self._timeout)
         f.id = self._next_id()
         for fn in self._done_callbacks:
             f.add_done_callback(fn)
@@ -49,13 +50,17 @@ class Runner:
         return self._id
 
 
-def _execute_solver(binary, instance):
+def _execute_solver(binary, instance, timeout):
     p = Popen([binary, instance],
               stdin=DEVNULL, stdout=PIPE, stderr=PIPE,
               universal_newlines=True)  # Use text pipes
+    try:
+        out, err = p.communicate(timeout=timeout)
+        status = p.wait()
 
-    out, err = p.communicate()
-    status = p.wait()
-
-    return RunnerResult(instance=instance, exit_status=status,
-                        stdout=out, stderr=err)
+        return RunnerResult(instance=instance, exit_status=status,
+                            stdout=out, stderr=err, timeout=False)
+    except TimeoutExpired:
+        p.kill()
+        return RunnerResult(instance=instance, exit_status=p.returncode,
+                            stdout="", stderr="", timeout=True)
