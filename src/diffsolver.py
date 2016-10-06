@@ -35,8 +35,9 @@ __status__ = "Development"
 
 _EXIT_BINARY_ERR = 1
 _EXIT_WORKDIR_ERR = 2
-_EXIT_RESULTS_ERR = 3
-_EXIT_RESULTS_INT = 4
+_EXIT_INSTDIR_ERR = 3
+_EXIT_RESULTS_ERR = 4
+_EXIT_RESULTS_INT = 5
 
 
 ###############################################
@@ -69,7 +70,11 @@ def run_gen(opts):
         print("'%s'" % opts.solver, "is not an executable file ... exiting")
         sys.exit(_EXIT_BINARY_ERR)
 
-    instances = get_instances(opts.workdir, opts.extension)
+    if not os.path.isdir(opts.instdir):
+        print(opts.instdir, "is not a directory ... exiting")
+        sys.exit(_EXIT_INSTDIR_ERR)
+
+    instances = get_instances(opts.instdir, opts.extension)
     results = evaluate_all_instances(opts.solver, instances, opts.parser,
                                      opts.num_jobs, opts.timeout)
 
@@ -91,10 +96,19 @@ def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
     runner.add_done_callback(
         generate_execution_finished_callback(results, parser))
 
-    print("Enqueuing  and waiting {0} evaluations".format(len(instances)))
-    futures = [runner.run(solver, path) for _, path in instances]
-    wait_futures(futures)
+    futures = []
+    try:
+        print("Enqueuing  and waiting {0} evaluations".format(len(instances)))
+        for _, path in instances:
+            futures.append(runner.run(solver, path))
+    except KeyboardInterrupt:
+        for f in futures:
+            f.cancel()
+    finally:
+        wait_futures(futures)
 
+    runner.shutdown()
+    print("")
     return results
 
 
@@ -103,14 +117,17 @@ def generate_execution_finished_callback(results, parser_name):
 
     def execution_finished_callback(future):
         try:  # TODO properly check future finalization state
-            result = future.result()  # concurrent.futures.Future
-            parser = create_parser(parser_name)
             with lock:
-                if result.timeout:
-                    print("Timeout {0}:".format(future.id), result.instance)
+                if future.cancelled():
+                    print("Cancelled {0}:".format(future.id))
                 else:
-                    print("Success {0}:".format(future.id), result.instance)
-                    results[result.instance] = parser.parse(result.stdout)
+                    r = future.result()  # concurrent.futures.Future
+                    parser = create_parser(parser_name)
+                    if r.timeout:
+                        print("Timeout {0}:".format(future.id), r.instance)
+                    else:
+                        print("Success {0}:".format(future.id), r.instance)
+                        results[r.instance] = parser.parse(r.stdout)
 
         except (KeyboardInterrupt, BrokenPoolException) as e:
             print("Execution aborted:", e)
@@ -288,8 +305,7 @@ def parse_arguments(args):
 
     base_subparser.add_argument('-w', '--workdir', type=str,
                                 default=os.getcwd(),
-                                help="Directory that contains the instances "
-                                     " and result files.")
+                                help="Directory where to write output files.")
 
     # **** Subparser (sub-command) "GEN" ****
     parser_gen = subparsers.add_parser('gen', parents=[base_subparser],
@@ -299,6 +315,9 @@ def parse_arguments(args):
 
     parser_gen.add_argument('-e', '--extension', type=str, action='store',
                             default='cnf', help="Instance files extension.")
+
+    parser_gen.add_argument('-i', '--instdir', type=str, action='store',
+                            help="Directory that contains the instances.")
 
     parser_gen.add_argument('-j', '--num_jobs', type=int,
                             default=1, help="Number of parallel executions.")

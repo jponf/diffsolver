@@ -45,6 +45,9 @@ class Runner:
     def add_done_callback(self, fn):
         self._done_callbacks.append(fn)
 
+    def shutdown(self):
+        self._executor.shutdown(wait=True)
+
     def _next_id(self):
         self._id += 1
         return self._id
