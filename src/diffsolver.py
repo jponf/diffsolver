@@ -11,7 +11,7 @@ import time
 
 from parsers import create_parser, get_parsers_names, serialize_results, \
                     deserialize_results, SerializationError, SolverResult
-from runner import BrokenPoolException, Runner, wait_futures
+from runner import BrokenPoolException, Runner
 
 
 ##############################
@@ -89,45 +89,51 @@ def run_gen(opts):
 
 
 def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
-    results = {}
+    futures, results = [], {}
     runner = Runner(num_jobs, timeout)
+    callback = generate_execution_finished_callback(
+        results, parser, get_common_path(instances))
 
     print("Setting runner task 'has finished' callback")
-    runner.add_done_callback(
-        generate_execution_finished_callback(results, parser))
+    runner.add_done_callback(callback)
 
-    futures = []
     try:
-        print("Enqueuing  and waiting {0} evaluations".format(len(instances)))
-        for _, path in instances:
+        print("Enqueuing and waiting {0} evaluations".format(len(instances)))
+        for path in instances:
             futures.append(runner.run(solver, path))
+        runner.shutdown(wait=True)
+
+        if len(results) != len(instances):
+            print("WARNING: There are some repeated instances")
+
+        print("")
+        return results
     except KeyboardInterrupt:
         for f in futures:
             f.cancel()
     finally:
-        wait_futures(futures)
-
-    runner.shutdown()
-    print("")
-    return results
+        runner.shutdown(wait=True)
 
 
-def generate_execution_finished_callback(results, parser_name):
+def generate_execution_finished_callback(results, parser_name, common_path):
     lock = threading.Lock()
 
     def execution_finished_callback(future):
-        try:  # TODO properly check future finalization state
-            with lock:
-                if future.cancelled():
-                    print("Cancelled {0}:".format(future.id))
+        try:
+            if future.cancelled():
+                print("Cancelled {0}".format(future.id))
+            else:
+                r = future.result()  # concurrent.futures.Future
+                parser = create_parser(parser_name)
+                if r.timeout:
+                    print("Timeout {0}:".format(future.id), r.instance)
                 else:
-                    r = future.result()  # concurrent.futures.Future
-                    parser = create_parser(parser_name)
-                    if r.timeout:
-                        print("Timeout {0}:".format(future.id), r.instance)
-                    else:
-                        print("Success {0}:".format(future.id), r.instance)
-                        results[r.instance] = parser.parse(r.stdout)
+                    print("Success {0}:".format(future.id), r.instance)
+                    with lock:
+                        name = r.instance.replace(common_path, '', 1)
+                        print("Name:", name)
+                        print("CPath:", common_path)
+                        results[name] = parser.parse(r.stdout)
 
         except (KeyboardInterrupt, BrokenPoolException) as e:
             print("Execution aborted:", e)
@@ -142,7 +148,6 @@ def generate_execution_finished_callback(results, parser_name):
 
 def run_diff(opts):
     """Runs the test sub-command"""
-    find_and_fix_results_path(opts)
     print_options_summary(opts)
 
     num_different = 0
@@ -190,7 +195,7 @@ def get_instances(directory, extension):
     dot_ext = "." + extension
 
     for root, dirs, files in os.walk(directory):
-        instances.extend((f, os.path.join(root, f))
+        instances.extend(os.path.join(root, f)
                          for f in files if f.endswith(dot_ext))
     return instances
 
@@ -209,23 +214,13 @@ def load_results_file_or_exit(file_path):
         sys.exit(_EXIT_RESULTS_ERR)
 
 
-def find_and_fix_results_path(opts):
-    """Checks if the results path is ok.
-
-    If the path does not point to a valid file it looks for it in the
-    user specified working directory.
-    """
-    if not os.path.isfile(opts.results):
-        workdir_path = os.path.join(opts.workdir, opts.results)
-        workdir_path_ext = workdir_path + ".results"
-        if os.path.isfile(workdir_path):
-            opts.results = workdir_path
-        elif os.path.isfile(workdir_path_ext):
-            opts.results = workdir_path_ext
-
-
 def is_executable(path):
     return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def get_common_path(paths):  # os.path.commonpath requires 3.5+
+    common_prefix = os.path.commonprefix(paths)
+    return os.path.join(os.path.dirname(common_prefix), '')
 
 
 def print_options_summary(opts):

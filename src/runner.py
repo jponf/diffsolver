@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import namedtuple
-from concurrent.futures import ProcessPoolExecutor, wait
+from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from subprocess import Popen, TimeoutExpired, DEVNULL, PIPE
 
@@ -10,7 +10,6 @@ from subprocess import Popen, TimeoutExpired, DEVNULL, PIPE
 ##############################################################################
 
 BrokenPoolException = BrokenProcessPool
-wait_futures = wait
 
 
 # Runner result tuple
@@ -45,8 +44,8 @@ class Runner:
     def add_done_callback(self, fn):
         self._done_callbacks.append(fn)
 
-    def shutdown(self):
-        self._executor.shutdown(wait=True)
+    def shutdown(self, wait=True):
+        self._executor.shutdown(wait=wait)
 
     def _next_id(self):
         self._id += 1

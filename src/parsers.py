@@ -145,9 +145,9 @@ def _deserilize_result(et_result):
         solution = solution[0].text.strip()
 
         return instance, \
-               SolverResult(conflicts=conflicts, decisions=decisions,
-                            optimum=optimum, propagations=propagations,
-                            restarts=restarts, solution=solution)
+            SolverResult(conflicts=conflicts, decisions=decisions,
+                         optimum=optimum, propagations=propagations,
+                         restarts=restarts, solution=solution)
     except ValueError:
         raise SerializationError("Tags '%s, %s, %s, %s and %s' must contain "
                                  "an integer value." %
