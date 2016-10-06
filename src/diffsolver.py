@@ -66,7 +66,7 @@ def run_gen(opts):
     print_options_summary(opts)
 
     if not is_executable(opts.solver):
-        print(opts.binary, "is not an executable file ... exiting")
+        print("'%s'" % opts.solver, "is not an executable file ... exiting")
         sys.exit(_EXIT_BINARY_ERR)
 
     instances = get_instances(opts.workdir, opts.extension)
@@ -212,19 +212,14 @@ def is_executable(path):
 
 
 def print_options_summary(opts):
-    fmt_str = "- {0:>19}:"
+    opts_nv = [(n, v) for n, v in opts.__dict__.items() if n != "func"]
+
+    req_len = max(len(n) for n, v in opts_nv)
+    fmt_str = '- {0:>' + str(req_len) + '}:'
 
     print("==== OPTIONS ====")
-    print(fmt_str.format("Working Directory"), opts.workdir)
-    print(fmt_str.format("Solver"), opts.solver)
-    print(fmt_str.format("Instances Extension"), opts.extension)
-    print(fmt_str.format("Result Parser"), opts.parser)
-    if hasattr(opts, 'comp_fields'):
-        print("= Compare Fields:", opts.comp_fields)
-    if hasattr(opts, 'show_fields'):
-        print("= Show Fields:", opts.show_fields)
-    if hasattr(opts, 'results'):
-        print("= Results File:", opts.results)
+    for name, value in opts_nv:
+        print(fmt_str.format(name), value)
     print("=================")
     print("")
 
