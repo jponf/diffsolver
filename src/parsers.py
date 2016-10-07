@@ -32,20 +32,39 @@ class SerializationError(Exception):
 #   SolverResult   #
 ####################
 
-_SolverResult = collections.namedtuple(
+ParserSolverResult = collections.namedtuple(
     '_SolverResult',
     ['conflicts', 'decisions', 'optimum',
      'propagations', 'restarts', 'solution']
 )
 
 
-class SolverResult(_SolverResult):
+_SolverResult = collections.namedtuple(
+    '_SolverResult',
+    ['conflicts', 'decisions', 'optimum',
+     'propagations', 'restarts', 'solution',
+     'cpu_time']
+)
+
+
+class CompleteSolverResult(_SolverResult):
 
     fields = _SolverResult._fields
 
     def extract_fields(self, fields):
         return [getattr(self, field) for field in fields]
 
+
+def build_complete_result(parser_result, cpu_time):
+    return CompleteSolverResult(
+        conflicts=parser_result.conflicts,
+        decisions=parser_result.decisions,
+        optimum=parser_result.optimum,
+        propagations=parser_result.propagations,
+        restarts=parser_result.restarts,
+        solution=parser_result.solution,
+        cpu_time=cpu_time
+    )
 
 ##########################################
 #  Parser serialization/deserialization  #
@@ -62,6 +81,7 @@ _XML_RESULTS_TAG = 'results'
 _XML_RESULT_TAG = 'result'
 _XML_SOLUTION_TAG = 'solution'
 _XML_SOLVER_TAG = 'solver'
+_XML_CPUTIME_TAG = 'cpu_time'
 _XML_TIMESTAMP_TAG = 'timestamp'
 
 
@@ -114,6 +134,7 @@ def serialize_results(results, solver="", timestamp="", prettify=False):
         et.SubElement(result, _XML_PROPAGATIONS_TAG).text = str(r.propagations)
         et.SubElement(result, _XML_RESTARTS_TAG).text = str(r.restarts)
         et.SubElement(result, _XML_SOLUTION_TAG).text = str(r.solution)
+        et.SubElement(result, _XML_CPUTIME_TAG).text = str(r.cpu_time)
 
     raw_str = et.tostring(root, 'utf-8')
     return raw_str if not prettify else \
@@ -132,6 +153,7 @@ def _deserilize_result(et_result):
     propagations = et_result.findall(_XML_PROPAGATIONS_TAG)
     restarts = et_result.findall(_XML_RESTARTS_TAG)
     solution = et_result.findall(_XML_SOLUTION_TAG)
+    cpu_time = et_result.findall(_XML_CPUTIME_TAG)
 
     if len(instance) != 1:
         raise_serialization_error(_XML_INSTANCE_TAG)
@@ -147,6 +169,8 @@ def _deserilize_result(et_result):
         raise_serialization_error(_XML_RESTARTS_TAG)
     if len(solution) != 1:
         raise_serialization_error(_XML_SOLUTION_TAG)
+    if len(cpu_time) != 1:
+        raise_serialization_error(_XML_CPUTIME_TAG)
 
     try:
         instance = instance[0].text.strip()
@@ -156,11 +180,13 @@ def _deserilize_result(et_result):
         propagations = int(propagations[0].text.strip())
         restarts = int(restarts[0].text.strip())
         solution = solution[0].text.strip()
+        cpu_time = float(cpu_time[0].text.strip())
 
         return instance, \
-            SolverResult(conflicts=conflicts, decisions=decisions,
-                         optimum=optimum, propagations=propagations,
-                         restarts=restarts, solution=solution)
+            CompleteSolverResult(conflicts=conflicts, decisions=decisions,
+                                 optimum=optimum, propagations=propagations,
+                                 restarts=restarts, solution=solution,
+                                 cpu_time=cpu_time)
     except ValueError:
         raise SerializationError("Tags '%s, %s, %s, %s and %s' must contain "
                                  "an integer value." %
@@ -230,7 +256,7 @@ class AbstractSolverParser(metaclass=abc.ABCMeta):
         raise NotImplementedError("Abstract method.")
 
     def get_result(self):
-        return SolverResult(
+        return ParserSolverResult(
             conflicts=self.conflicts, decisions=self.decisions,
             optimum=self.optimum, propagations=self.propagations,
             restarts=self.restarts, solution=self.solution

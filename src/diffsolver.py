@@ -10,7 +10,8 @@ import threading
 import time
 
 from parsers import create_parser, get_parsers_names, serialize_results, \
-                    deserialize_results, SerializationError, SolverResult
+                    deserialize_results, build_complete_result, \
+                    SerializationError, CompleteSolverResult
 from runner import BrokenPoolException, Runner
 
 
@@ -134,7 +135,8 @@ def generate_execution_finished_callback(results, parser_name, common_path):
                     print("Success {0}:".format(future.id), r.instance)
                     with lock:
                         name = r.instance.replace(common_path, '', 1)
-                        results[name] = parser.parse(r.stdout)
+                        results[name] = build_complete_result(
+                            parser.parse(r.output), r.cpu_time)
 
         except (KeyboardInterrupt, BrokenPoolException):
             print("Execution aborted:", future.id)
@@ -144,7 +146,6 @@ def generate_execution_finished_callback(results, parser_name, common_path):
 
 # Diff sub-command
 ##############################################################################
-
 
 def run_diff(opts):
     """Runs the test sub-command"""
@@ -339,19 +340,21 @@ def parse_arguments(args):
 
     parser_diff.add_argument('-cf', '--comp_fields', nargs='+',
                              action=MultipleChoicesAction,
-                             choices=SolverResult.fields,
-                             default=SolverResult.fields,
+                             choices=CompleteSolverResult.fields,
+                             default=CompleteSolverResult.fields,
                              help="Result fields to compare. Valid Options "
-                                  "are: {%s}" % ", ".join(SolverResult.fields),
+                                  "are: {%s}" % ", "
+                                  .join(CompleteSolverResult.fields),
                              metavar='fields')
 
     parser_diff.add_argument('-sf', '--show_fields', nargs='*',
                              action=MultipleChoicesAction,
-                             choices=SolverResult.fields,
+                             choices=CompleteSolverResult.fields,
                              default=[],  # Otherwise it's None
                              help="Solver result fields shown when the compared"
                                   " fields are equal. Valid Options"
-                                  " are: {%s}" % ", ".join(SolverResult.fields),
+                                  " are: {%s}" % ", "
+                                  .join(CompleteSolverResult.fields),
                              metavar='fields')
 
     parser_diff.set_defaults(func=run_diff)
