@@ -79,6 +79,7 @@ def run_gen(opts):
                                      opts.num_jobs, opts.timeout)
 
     if results is not None:
+        print("Serializing", len(results), "results")
         solver_name = os.path.basename(opts.solver)
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
         serialized_result = serialize_results(
@@ -87,6 +88,8 @@ def run_gen(opts):
         results_file = os.path.join(opts.workdir, solver_name + ".results")
         with open(results_file, 'wt') as f:
             f.write(serialized_result)
+
+    print("Done!")
 
 
 def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
@@ -133,7 +136,7 @@ def generate_execution_finished_callback(results, parser_name, common_path):
                         name = r.instance.replace(common_path, '', 1)
                         results[name] = parser.parse(r.stdout)
 
-        except (KeyboardInterrupt, BrokenPoolException) as e:
+        except (KeyboardInterrupt, BrokenPoolException):
             print("Execution aborted:", future.id)
 
     return execution_finished_callback
@@ -202,7 +205,7 @@ def load_results_file_or_exit(file_path):
     try:
         with open(file_path, "rt") as f:
             return deserialize_results(f.read())
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         print("File not found: %s" % file_path)
         sys.exit(_EXIT_RESULTS_ERR)
     except IOError as e:
@@ -287,7 +290,7 @@ def parse_arguments(args):
         epilog="")
 
     parser.add_argument('--version', action='version',
-                    version="Version: {0}".format(__version__))
+                        version="Version: {0}".format(__version__))
 
     subparsers = parser.add_subparsers(help='Possible options are:',
                                        dest='command')
