@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 # Python interpreter executable
 PYTHON=python3
@@ -11,8 +11,10 @@ PYV_MICRO=2
 # Output file name
 ZAPPNAME=diffsolver.pyz
 
+
 # Get version
 ################################################################################
+
 py_version_all=`$PYTHON 2>&1 -V`  # Python2 writes into stderr
 if [ "$?" -ne 0 ]; then
     echo "Python not found ($PYTHON)"

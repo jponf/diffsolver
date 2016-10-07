@@ -104,9 +104,6 @@ def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
             futures.append(runner.run(solver, path))
         runner.shutdown(wait=True)
 
-        if len(results) != len(instances):
-            print("WARNING: There are some repeated instances")
-
         print("")
         return results
     except KeyboardInterrupt:
@@ -324,7 +321,6 @@ def parse_arguments(args):
 
     parser_gen.add_argument('-t', '--timeout', type=int, default=30,
                             help="Evaluations timeout in seconds.")
-
 
     parser_gen.set_defaults(func=run_gen)
 
