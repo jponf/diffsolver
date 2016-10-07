@@ -78,14 +78,15 @@ def run_gen(opts):
     results = evaluate_all_instances(opts.solver, instances, opts.parser,
                                      opts.num_jobs, opts.timeout)
 
-    solver_name = os.path.basename(opts.solver)
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
-    serialized_result = serialize_results(
-        results, solver=solver_name, timestamp=timestamp, prettify=True)
+    if results is not None:
+        solver_name = os.path.basename(opts.solver)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S%z", time.localtime())
+        serialized_result = serialize_results(
+            results, solver=solver_name, timestamp=timestamp, prettify=True)
 
-    results_file = os.path.join(opts.workdir, solver_name + ".results")
-    with open(results_file, 'wt') as f:
-        f.write(serialized_result)
+        results_file = os.path.join(opts.workdir, solver_name + ".results")
+        with open(results_file, 'wt') as f:
+            f.write(serialized_result)
 
 
 def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
@@ -114,6 +115,8 @@ def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
     finally:
         runner.shutdown(wait=True)
 
+    return None
+
 
 def generate_execution_finished_callback(results, parser_name, common_path):
     lock = threading.Lock()
@@ -131,12 +134,10 @@ def generate_execution_finished_callback(results, parser_name, common_path):
                     print("Success {0}:".format(future.id), r.instance)
                     with lock:
                         name = r.instance.replace(common_path, '', 1)
-                        print("Name:", name)
-                        print("CPath:", common_path)
                         results[name] = parser.parse(r.stdout)
 
         except (KeyboardInterrupt, BrokenPoolException) as e:
-            print("Execution aborted:", e)
+            print("Execution aborted:", future.id)
 
     return execution_finished_callback
 
@@ -144,42 +145,42 @@ def generate_execution_finished_callback(results, parser_name, common_path):
 # Diff sub-command
 ##############################################################################
 
-# TODO REWRITE
 
 def run_diff(opts):
     """Runs the test sub-command"""
     print_options_summary(opts)
 
-    num_different = 0
+    num_instances1, num_instances2, num_different = 0, 0, 0
     results1 = load_results_file_or_exit(opts.results1)
     results2 = load_results_file_or_exit(opts.results2)
 
-    print(results1)
-    print(results2)
+    all_instances = list(results1.keys() | results2.keys())
+    for instance in all_instances:
+        if instance in results1.keys() and instance in results2.keys():
+            num_instances1 += 1
+            num_instances2 += 1
+            r1, r2 = results1[instance], results2[instance]
 
-    # for ind, (inst, path) in enumerate(instances, start=1):
-    #     if inst not in results:
-    #         print("++ ({0}/{1}) Ignoring".format(ind, len(instances)),
-    #               inst, ". Not present in results")
-    #     else:
-    #         print("++ ({0}/{1}) Executing".format(ind, len(instances)), inst,
-    #               end='', flush=True)
-    #
-    #         status, out, err = execute_solver(opts.binary, path)
-    #         parser = create_parser(opts.parser)
-    #         result = parser.parse(out)
-    #         expected = results[inst]
-    #
-    #         differences = compute_results_differences(opts, expected, result)
-    #         if differences:
-    #             print(" -- DIFFERENT")
-    #             num_different += 1
-    #             print_results_comparison(differences)
-    #         else:
-    #             print(" -- EQUAL")
-    #             print_results_comparison(
-    #                 (attr, getattr(expected, attr), getattr(result, attr))
-    #                 for attr in opts.show_fields)
+            diff = compute_results_differences(r1, r2, opts.comp_fields)
+            if diff:
+                num_different += 1
+                print("-- DIFFERENT:", instance)
+                print_results_comparison(diff)
+            else:
+                print("++ EQUAL:", instance)
+                to_show = list(zip(opts.show_fields,
+                                   r1.extract_fields(opts.show_fields),
+                                   r2.extract_fields(opts.show_fields)))
+                print_results_comparison(to_show)
+
+        elif instance in results1.keys():
+            num_instances1 += 1
+            print(":: Only solved in results 1:", instance)
+        elif instance in results2.keys():
+            num_instances2 += 1
+            print(":: Only solved in results 2:", instance)
+        else:
+            print("WTF:", instance)
 
     print("")
     print("***", num_different, "different results found. ***")
@@ -236,22 +237,22 @@ def print_options_summary(opts):
     print("")
 
 
-def compute_results_differences(opts, expected, result):
+def compute_results_differences(results1, results2, comp_fields):
     differences = []
-    for attr in opts.comp_fields:
-        val_e = getattr(expected, attr)
-        val_r = getattr(result, attr)
-        if val_e != val_r:
-            differences.append((attr, val_e, val_r))
+    for attr in comp_fields:
+        val_1 = getattr(results1, attr)
+        val_2 = getattr(results2, attr)
+        if val_1 != val_2:
+            differences.append((attr, val_1, val_2))
 
     return differences
 
 
 def print_results_comparison(attr_values):
-    for attr, val_e, val_r in attr_values:
-        print("**", attr)
-        print("   -- Exp:", val_e)
-        print("   -- Res:", val_r)
+    for attr, val_1, val_2 in attr_values:
+        print("***", attr)
+        print("   -- 1:", val_1)
+        print("   -- 2:", val_2)
 
 
 ########################
