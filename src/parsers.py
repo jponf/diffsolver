@@ -32,13 +32,24 @@ class SerializationError(Exception):
 #   SolverResult   #
 ####################
 
-SolverResult = collections.namedtuple(
-    'SolverResult',
+_SolverResult = collections.namedtuple(
+    '_SolverResult',
     ['conflicts', 'decisions', 'optimum',
      'propagations', 'restarts', 'solution']
 )
 
-SolverResult.fields = SolverResult._fields
+
+class SolverResult(_SolverResult):
+
+    fields = _SolverResult._fields
+
+    def extract_fields(self, fields):
+        return [getattr(self, field) for field in fields]
+
+
+##########################################
+#  Parser serialization/deserialization  #
+##########################################
 
 
 _XML_INSTANCE_TAG = 'instance'
@@ -55,9 +66,9 @@ _XML_TIMESTAMP_TAG = 'timestamp'
 
 
 def deserialize_results(serialized_str):
-    """Deserializes the results from the given string.
+    """Deserialize the results from the given string.
 
-    :param data: An XML formatted string with the serialized results.
+    :param serialized_str: An XML string with the serialized results.
     :return: A dictionary with the mapping, instnce_name -> SolverResult.
     """
     try:
@@ -80,6 +91,8 @@ def serialize_results(results, solver="", timestamp="", prettify=False):
 
     :param results: A dictionary whose keys are instance paths and their
                     values SolverResult instances.
+    :param solver: The solver used to generate the given results.
+    :param timestamp: Time when the results where generated.
     :param prettify: Whether the resulting XML must be human readable.
 
     :return: An XML formatted string with the provided results.
