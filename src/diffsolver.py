@@ -176,15 +176,17 @@ def run_diff(opts):
 
         elif instance in results1.keys():
             num_instances1 += 1
-            print(":: Only solved in results 1:", instance)
+            print(":: Only in results 1:", instance)
         elif instance in results2.keys():
             num_instances2 += 1
-            print(":: Only solved in results 2:", instance)
+            print(":: Only in results 2:", instance)
         else:
             print("WTF:", instance)
 
     print("")
     print("***", num_different, "different results found. ***")
+    print("***", num_instances1, "on results 1. ***")
+    print("***", num_instances2, "on results 2. ***")
 
 
 #######################
