@@ -138,7 +138,7 @@ def serialize_results(results, solver="", timestamp="", prettify=False):
 
     raw_str = et.tostring(root, 'utf-8')
     return raw_str if not prettify else \
-           xml.dom.minidom.parseString(raw_str).toprettyxml(indent='    ')
+        xml.dom.minidom.parseString(raw_str).toprettyxml(indent='    ')
 
 
 def _deserilize_result(et_result):
@@ -179,7 +179,7 @@ def _deserilize_result(et_result):
         optimum = int(optimum[0].text.strip())
         propagations = int(propagations[0].text.strip())
         restarts = int(restarts[0].text.strip())
-        solution = solution[0].text.strip()
+        solution = solution[0].text.strip() if solution[0].text else ""
         cpu_time = float(cpu_time[0].text.strip())
 
         return instance, \
