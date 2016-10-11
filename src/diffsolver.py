@@ -151,15 +151,14 @@ def run_diff(opts):
     """Runs the test sub-command"""
     print_options_summary(opts)
 
-    num_instances1, num_instances2, num_different = 0, 0, 0
     results1 = load_results_file_or_exit(opts.results1)
     results2 = load_results_file_or_exit(opts.results2)
+    num_different, num_equal, cpu_time1, cpu_time2 = 0, 0, 0.0, 0.0
+
 
     all_instances = list(results1.keys() | results2.keys())
     for instance in all_instances:
         if instance in results1.keys() and instance in results2.keys():
-            num_instances1 += 1
-            num_instances2 += 1
             r1, r2 = results1[instance], results2[instance]
 
             diff = compute_results_differences(r1, r2, opts.comp_fields)
@@ -168,25 +167,30 @@ def run_diff(opts):
                 print("-- DIFFERENT:", instance)
                 print_results_comparison(diff)
             else:
+                num_equal += 1
+                cpu_time1 += r1.cpu_time
+                cpu_time2 += r2.cpu_time
                 print("++ EQUAL:", instance)
                 to_show = list(zip(opts.show_fields,
                                    r1.extract_fields(opts.show_fields),
                                    r2.extract_fields(opts.show_fields)))
                 print_results_comparison(to_show)
-
         elif instance in results1.keys():
-            num_instances1 += 1
             print(":: Only in results 1:", instance)
         elif instance in results2.keys():
-            num_instances2 += 1
             print(":: Only in results 2:", instance)
         else:
             print("WTF:", instance)
 
     print("")
-    print("***", num_different, "different results found. ***")
-    print("***", num_instances1, "on results 1. ***")
-    print("***", num_instances2, "on results 2. ***")
+    print("*** # Results on 1:", len(results1), "***")
+    print("*** # Results on 2:", len(results2), "***")
+    print("*** # Equal results:", num_equal, "***")
+    print("*** # Different results:", num_different, "***")
+    print("*** Avg time for equal results (1):",
+          cpu_time1 / num_equal if num_equal > 0 else "--", "***")
+    print("*** Avg time for equal resutls (2):",
+          cpu_time2 / num_equal if num_equal > 0 else "--", "***")
 
 
 #######################
