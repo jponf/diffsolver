@@ -316,6 +316,10 @@ def parse_arguments(args):
     parser_gen.add_argument('solver', type=str, action='store',
                             help="Path to the solver executable file.")
 
+    parser_gen.add_argument('-sp', '--solver_parameters', nargs='*',
+                            default=[],
+                            help='Parameters to be passed to the solver')
+
     parser_gen.add_argument('-e', '--extension', type=str, action='store',
                             default='cnf', help="Instance files extension.")
 

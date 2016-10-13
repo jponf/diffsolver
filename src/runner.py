@@ -41,9 +41,9 @@ class Runner:
         self._done_callbacks = []
         self._id = 0
 
-    def run(self, solver, instance):
+    def run(self, solver, instance, parameters=()):
         f = self._executor.submit(_execute_solver, solver, instance,
-                                  self._timeout)
+                                  parameters, self._timeout)
         f.id = self._next_id()
         for fn in self._done_callbacks:
             f.add_done_callback(fn)
@@ -61,9 +61,12 @@ class Runner:
         return self._id
 
 
-def _execute_solver(binary, instance, timeout):
-    p = Popen([binary, instance],
-              stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL,
+def _execute_solver(binary, instance, parameters, timeout):
+    command = [binary]
+    command.extend(parameters)
+    command.append(instance)
+
+    p = Popen(command, stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL,
               universal_newlines=True) # Use text pipelines
     handle = _get_subprocess_handle(p)
 
