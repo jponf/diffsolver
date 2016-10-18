@@ -3,7 +3,7 @@
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
-from subprocess import Popen, DEVNULL, PIPE
+from subprocess import Popen, DEVNULL, PIPE, STDOUT
 from threading import Timer
 
 import errno
@@ -62,8 +62,11 @@ class Runner:
 
 
 def _execute_solver(binary, instance, timeout):
+    old_cwd = os.getcwd()
+    os.chdir(os.path.dirname(os.path.abspath(binary)))
+
     p = Popen([binary, instance],
-              stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL,
+              stdin=DEVNULL, stdout=PIPE, stderr=STDOUT,
               universal_newlines=True) # Use text pipelines
     handle = _get_subprocess_handle(p)
 
@@ -84,6 +87,8 @@ def _execute_solver(binary, instance, timeout):
 
     if not p.timeout:
         cpu_time, sys_time = _wait_and_get_execution_time(handle)
+
+    os.chdir(old_cwd)
 
     return RunnerResult(instance=instance, exit_status=p.returncode,
                         output=output, timeout=p.timeout,
