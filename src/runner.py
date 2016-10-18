@@ -61,16 +61,13 @@ class Runner:
         return self._id
 
 
-def _execute_solver(binary, instance, timeout):
-    old_cwd = os.getcwd()
-    os.chdir(os.path.dirname(os.path.abspath(binary)))
-
-    p = Popen([binary, instance],
-              stdin=DEVNULL, stdout=PIPE, stderr=STDOUT,
 def _execute_solver(binary, instance, parameters, timeout):
     command = [binary]
     command.extend(parameters)
     command.append(instance)
+
+    old_cwd = os.getcwd()
+    os.chdir(os.path.dirname(os.path.abspath(binary)))
 
     p = Popen(command, stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL,
               universal_newlines=True) # Use text pipelines
