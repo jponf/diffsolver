@@ -71,13 +71,14 @@ def run_gen(opts):
         print("'%s'" % opts.solver, "is not an executable file ... exiting")
         sys.exit(_EXIT_BINARY_ERR)
 
-    if not os.path.isdir(opts.instdir):
+    if not opts.instdir or not os.path.isdir(opts.instdir):
         print(opts.instdir, "is not a directory ... exiting")
         sys.exit(_EXIT_INSTDIR_ERR)
 
     instances = get_instances(opts.instdir, opts.extension)
     results = evaluate_all_instances(opts.solver, instances, opts.parser,
-                                     opts.num_jobs, opts.timeout)
+                                     opts.num_jobs, opts.solver_parameters,
+                                     opts.timeout)
 
     if results is not None:
         print("Serializing", len(results), "results")
@@ -93,7 +94,8 @@ def run_gen(opts):
     print("Done!")
 
 
-def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
+def evaluate_all_instances(solver, instances, parser, num_jobs,
+                           parameters, timeout):
     futures, results = [], {}
     runner = Runner(num_jobs, timeout)
     callback = generate_execution_finished_callback(
@@ -105,7 +107,7 @@ def evaluate_all_instances(solver, instances, parser, num_jobs, timeout):
     try:
         print("Enqueuing and waiting {0} evaluations".format(len(instances)))
         for path in instances:
-            futures.append(runner.run(solver, path))
+            futures.append(runner.run(solver, path, parameters))
         runner.shutdown(wait=True)
 
         print("")
@@ -154,7 +156,6 @@ def run_diff(opts):
     results1 = load_results_file_or_exit(opts.results1)
     results2 = load_results_file_or_exit(opts.results2)
     num_different, num_equal, cpu_time1, cpu_time2 = 0, 0, 0.0, 0.0
-
 
     all_instances = list(results1.keys() | results2.keys())
     for instance in all_instances:

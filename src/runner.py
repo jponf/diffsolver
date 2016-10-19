@@ -3,6 +3,7 @@
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
+from signal import SIGKILL
 from subprocess import Popen, DEVNULL, PIPE
 from threading import Timer
 
@@ -41,7 +42,7 @@ class Runner:
         self._done_callbacks = []
         self._id = 0
 
-    def run(self, solver, instance, parameters=()):
+    def run(self, solver, instance, parameters):
         f = self._executor.submit(_execute_solver, solver, instance,
                                   parameters, self._timeout)
         f.id = self._next_id()
@@ -69,9 +70,7 @@ def _execute_solver(binary, instance, parameters, timeout):
     old_cwd = os.getcwd()
     os.chdir(os.path.dirname(os.path.abspath(binary)))
 
-    p = Popen(command, stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL,
-              universal_newlines=True) # Use text pipelines
-    handle = _get_subprocess_handle(p)
+    p, handle = _start_runner_subprocess(command)
 
     p.timeout = False
     output, cpu_time, sys_time = "", -1, -1
@@ -101,7 +100,12 @@ def _execute_solver(binary, instance, parameters, timeout):
 def _timeout_callback(process):
     if process.poll() is None:
         try:
-            process.kill()
+            print("Killing")
+            if osutils.is_posix():
+                pgid = os.getpgid(process.pid)
+                os.killpg(pgid, SIGKILL)
+            else:
+                process.kill()
             process.timeout = True
         except OSError as e:
             if e.errno != errno.ESRCH:
@@ -111,6 +115,13 @@ def _timeout_callback(process):
 ##############################################################################
 # OS Utility functions
 ##############################################################################
+
+def _start_runner_subprocess(command):
+    # Use text pipelines
+    p = Popen(command, stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL,
+              universal_newlines=True, start_new_session=True)
+    return p, _get_subprocess_handle(p)
+
 
 def _get_subprocess_handle(process):
     if osutils.is_posix():
