@@ -47,16 +47,16 @@ find . -name "*.pyo" -delete
 find . -name "__pycache__" -delete
 
 
-# Generate zipapp
+# Generate zipapp.sh
 ################################################################################
 
 [ "${py_version[$PYV_MAJOR]}" -gt 3 ] || \
 [[ "${py_version[$PYV_MAJOR]}" -eq 3 && "${py_version[$PYV_MINOR]}" -ge 5 ]]
 has_zipapp=$?
 
-if [ $has_zipapp == 0 ]; then  # It has zipapp
+if [ $has_zipapp == 0 ]; then  # It has zipapp.sh
     echo "-- Using zipapp module"
-    $PYTHON -m zipapp src -m diffsolver:main -o $ZAPPNAME \
+    $PYTHON -m zipapp ../src -m diffsolver:main -o $ZAPPNAME \
             -p "/usr/bin/env $PYTHON"
 else
     # Add main function
